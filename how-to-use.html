@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>วิธีใช้ Daily Sales Report</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1c2733; --muted: #5b6b7c; --line: #d5dde6;
+    --blue: #1f5fa8; --blue-soft: #e4eefa; --green: #1d7a4c; --green-soft: #e1f3e9;
+    --amber: #96610a; --amber-soft: #fbefd6; --red: #a8321f; --red-soft: #fbe6e2; --grey-soft: #eceff3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --card: #1b222b; --ink: #e6ebf1; --muted: #9aa8b7; --line: #303a46;
+      --blue: #7db4f0; --blue-soft: #1d3046; --green: #6fd09b; --green-soft: #173527;
+      --amber: #f0c36a; --amber-soft: #3a2f16; --red: #f09a8a; --red-soft: #40211c; --grey-soft: #252d37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 "Leelawadee UI", "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 44px 0 14px; }
+  p { margin: 0 0 12px; }
+  a { color: var(--blue); }
+  .lead { color: var(--muted); max-width: 760px; }
+  code { background: var(--grey-soft); padding: 1px 6px; border-radius: 4px; font: 14px Consolas, monospace; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+  .ok { background: var(--green-soft); color: var(--green); }
+  .look { background: var(--amber-soft); color: var(--amber); }
+  .stop { background: var(--red-soft); color: var(--red); }
+  .info { background: var(--blue-soft); color: var(--blue); }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .toc a { background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 3px 13px; font-size: 14px; text-decoration: none; }
+
+  .flow { display: grid; gap: 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .num { width: 36px; height: 36px; border-radius: 50%; background: var(--blue); color: var(--card);
+         display: grid; place-items: center; font-weight: 700; flex: none; }
+  .rail::after { content: ""; flex: 1; width: 2px; background: var(--line); margin: 4px 0; }
+  .step:last-child .rail::after { display: none; }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 14px; min-width: 0; }
+  .box h3 { margin: 0 0 4px; font-size: 17px; }
+  .box p, .box ul { margin: 0; color: var(--muted); }
+  .box ul { padding-left: 18px; margin-top: 6px; }
+  .box p + p { margin-top: 6px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--grey-soft); font-size: 14px; }
+  tr:last-child td { border-bottom: 0; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto;
+        font: 14px/1.5 Consolas, monospace; margin: 0 0 12px; }
+  .note { border-left: 4px solid var(--blue); background: var(--blue-soft); padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+  .warn { border-left-color: var(--amber); background: var(--amber-soft); }
+  @media print { body { background: #fff; } .toc { display: none; } .box, .card, table, pre { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>วิธีใช้ Daily Sales Report</h1>
+  <p class="lead">คู่มือการทำรายงานยอดขายรถประจำวัน (KDC SPDR) ด้วยโปรแกรมในโฟลเดอร์ <code>D:\Automation</code>
+    งานประจำวันมีแค่ 4 อย่าง: วางไฟล์ export, ดับเบิลคลิก <code>Run.bat</code>, ตรวจ QC, ตอบคำถาม 2 ข้อ
+    ถ้าอยากรู้ว่าโปรแกรมทำอะไรข้างในทีละขั้น ดูที่ <a href="workflow.html">workflow.html</a></p>
+  <div class="toc">
+    <a href="#setup">ติดตั้งครั้งแรก</a>
+    <a href="#daily">ขั้นตอนประจำวัน</a>
+    <a href="#files">ไฟล์ที่ต้องวาง</a>
+    <a href="#result">ผลลัพธ์ที่ได้</a>
+    <a href="#qc">อ่าน QC report</a>
+    <a href="#rules">สิ่งที่โปรแกรมทำกับข้อมูล</a>
+    <a href="#problems">แก้ปัญหา</a>
+    <a href="#limits">ข้อจำกัด</a>
+    <a href="#test">ทดลองรัน</a>
+  </div>
+
+  <h2 id="setup">ติดตั้งครั้งแรก (ทำครั้งเดียวต่อเครื่อง)</h2>
+  <div class="flow">
+    <div class="step">
+      <div class="rail"><div class="num">1</div></div>
+      <div class="box">
+        <h3>เครื่องต้องมี Microsoft Excel</h3>
+        <p>โปรแกรมใช้ Excel คำนวณสูตรและถ่ายรูปรายงาน ตัว Setup ติดตั้ง Excel ให้ไม่ได้</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">2</div></div>
+      <div class="box">
+        <h3>ดับเบิลคลิก <code>Setup.bat</code></h3>
+        <p>ต้องต่ออินเทอร์เน็ต โปรแกรมจะติดตั้ง Python กับ library ที่ต้องใช้ และสร้างโฟลเดอร์ <code>Input</code>, <code>adjust</code>, <code>Main</code>, <code>output</code> ให้</p>
+        <p>เสร็จแล้วต้องขึ้นว่า <code>Setup finished. Everything is ready.</code></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">3</div></div>
+      <div class="box">
+        <h3>วางไฟล์รายงานหลักไว้ใน <code>Main</code></h3>
+        <p>ใน <code>Main</code> ต้องมีไฟล์ workbook <b>ไฟล์เดียวเท่านั้น</b> (โฟลเดอร์ย่อย <code>Main\previous</code> ไม่นับ) และต้องเป็นไฟล์ของเดือนที่กำลังทำรายงาน</p>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="daily">ขั้นตอนประจำวัน</h2>
+  <div class="flow">
+    <div class="step">
+      <div class="rail"><div class="num">1</div></div>
+      <div class="box">
+        <h3>วางไฟล์ export ลงใน <code>Input</code></h3>
+        <p>วางตามที่ดาวน์โหลดมาจากระบบได้เลย ไม่ต้องแก้ไข ไม่ต้องเปลี่ยนชื่อ ดูรายการไฟล์ที่ <a href="#files">ไฟล์ที่ต้องวาง</a></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">2</div></div>
+      <div class="box">
+        <h3>ดับเบิลคลิก <code>Run.bat</code></h3>
+        <p>หน้าต่างสีดำจะแสดงความคืบหน้า รอจนมีกล่องคำถามขึ้นมา ระหว่างนี้ไม่ต้องทำอะไร</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">3</div></div>
+      <div class="box">
+        <h3>ตรวจ QC ก่อนตอบคำถาม</h3>
+        <p>กล่องคำถามรอได้ ยังไม่ต้องกด เปิดโฟลเดอร์ <code>output\&lt;วันที่&gt;\&lt;เลขรอบ&gt;</code> แล้วตรวจ:</p>
+        <ul>
+          <li>ไฟล์ <code>QC ....txt</code>: ดู CHECKLIST ว่าไฟล์ครบ และดูบรรทัดที่ขึ้นต้นด้วย ALERT, WARNING, CHECK</li>
+          <li>รูปรายงาน <code>.png</code> และไฟล์ workbook: ดูว่าตัวเลขสมเหตุสมผล</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">4</div></div>
+      <div class="box">
+        <h3>ตอบคำถาม 2 ข้อ</h3>
+        <ul>
+          <li><b>Replace the workbook in Main with this output?</b><br>
+            Yes = ไฟล์ผลลัพธ์กลายเป็นไฟล์หลักของวันถัดไป ไฟล์เดิมถูกเก็บไว้ใน <code>Main\previous</code><br>
+            No = <code>Main</code> อยู่เหมือนเดิม</li>
+          <li><b>Delete the export file(s) that were used from the Input folder?</b><br>
+            Yes = ไฟล์ที่ใช้แล้วไปอยู่ใน Recycle Bin, <code>Input</code> ว่างพร้อมสำหรับวันถัดไป<br>
+            No = ไฟล์อยู่ใน <code>Input</code> ต่อ</li>
+        </ul>
+        <p>ทั้งสองข้อ ค่าเริ่มต้นคือ No กด Yes เมื่อ QC ผ่านแล้วเท่านั้น</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">5</div></div>
+      <div class="box">
+        <h3>ส่งรายงาน</h3>
+        <p>ใช้ไฟล์ workbook และรูปจากโฟลเดอร์ <code>output</code> ของรอบนั้น แล้วกดปุ่มใดก็ได้เพื่อปิดหน้าต่างสีดำ</p>
+      </div>
+    </div>
+  </div>
+  <p class="note warn">ถ้า QC ไม่ผ่าน ให้ตอบ <b>No</b> ทั้งสองข้อ แก้สาเหตุ (เช่น ดาวน์โหลดไฟล์ที่ขาดมาเพิ่ม) แล้วรัน <code>Run.bat</code> ใหม่
+    รันซ้ำกี่รอบก็ได้ในวันเดียวกัน แต่ละรอบได้โฟลเดอร์เลขใหม่ (1, 2, 3 ...) ไม่ทับของเดิม</p>
+
+  <h2 id="files">ไฟล์ที่ต้องวางใน Input</h2>
+  <p>หนึ่งวันมี 15 ส่วน: Sale, Order, Stock ของ KDC, Dealer, Geely, BMW และ MBS
+    โปรแกรมดูจาก<b>หัวคอลัมน์</b>ว่าไฟล์ไหนเป็นส่วนไหน ไม่ได้ดูจากชื่อไฟล์ ชื่อด้านล่างเป็นตัวอย่างจากไฟล์ของวันที่ 7 ต.ค. 2026</p>
+  <div class="scroll">
+  <table>
+    <tr><th>กลุ่ม</th><th>Sale</th><th>Order</th><th>Stock</th></tr>
+    <tr><td>KDC / KDC-X</td><td><code>Sales Report KDC KDCX.xls</code></td><td><code>Order Status KDC KDCX.xls</code></td><td><code>Stock Report KDC KDCX.xls</code></td></tr>
+    <tr><td>Dealer</td><td><code>Sales Report DL.xls</code></td><td><code>Order Status DL.xls</code></td><td><code>Stock Report DL.xls</code></td></tr>
+    <tr><td>Geely + BMW</td><td><code>Pre order-Book report Geely.xls</code></td><td><code>Pre order-Book report Geely (2).xls</code></td><td><code>Stock Report Geely.xls</code></td></tr>
+    <tr><td>MBS (KLM)</td><td><code>Pre order-Book report KLM (2).xls</code></td><td><code>Pre order-Book report KLM.xls</code></td><td><code>Stock Report KLM.xls</code></td></tr>
+  </table>
+  </div>
+  <ul>
+    <li>BMW ไม่มีไฟล์ของตัวเอง แถวของ BMW อยู่ในไฟล์ของ Geely โปรแกรมแยกให้เอง</li>
+    <li>ถ้าโปรแกรมอ่านยี่ห้อจากไฟล์ของ Geely / BMW / MBS ไม่ออก (ขึ้น UNKNOWN) ให้ใส่คำว่า <code>GEELY</code>, <code>BMW</code> หรือ <code>MBS</code> ในชื่อไฟล์</li>
+    <li>ไฟล์ที่ขาดจะขึ้น <span class="tag stop">MISSING</span> ใน CHECKLIST โปรแกรมยังทำส่วนที่มีต่อไป ส่วนที่ขาดจะคงข้อมูลเดิมของ Main ไว้</li>
+  </ul>
+
+  <h2 id="result">ผลลัพธ์ที่ได้</h2>
+  <pre>D:\Automation
+├─ Input\        ไฟล์ export ดิบ (คุณวาง)
+├─ adjust\       ไฟล์ export ที่แก้แล้ว ก่อนใส่ลง workbook เช่น Sales adjusted 20261007-0753.xlsx
+├─ Main\         ไฟล์รายงานหลัก 1 ไฟล์
+│  └─ previous\  ไฟล์หลักรุ่นก่อน ๆ (เก็บทุกครั้งที่ตอบ Yes)
+└─ output\
+   └─ 2026-10-07\
+      └─ 1\      ผลของรอบที่ 1 ของวันนั้น</pre>
+  <div class="scroll">
+  <table>
+    <tr><th>ไฟล์ในโฟลเดอร์ของรอบ</th><th>คืออะไร</th></tr>
+    <tr><td><code>&lt;ชื่อไฟล์หลัก&gt; - applied &lt;เวลา&gt;.xlsx</code></td><td>workbook ที่ใส่ข้อมูลวันนี้แล้ว และ Excel คำนวณสูตรใหม่แล้ว</td></tr>
+    <tr><td><code>Daily Report &lt;เวลา&gt;.png</code></td><td>รูป sheet <code>Daily Report</code> ช่วง F1:AJ94</td></tr>
+    <tr><td><code>KOLAOTOPIA by model &lt;เวลา&gt;.png</code></td><td>รูป sheet <code>KOLAOTOPIA byModel.DAET</code> ช่วง A1:BX102 หลังกรองใหม่</td></tr>
+    <tr><td><code>By model with MOS &lt;เวลา&gt;.png</code></td><td>รูป sheet <code>By Model.DATE - with MOS</code> ช่วง A4:CJ101</td></tr>
+    <tr><td><code>By model sales &lt;เวลา&gt;.png</code></td><td>sheet เดียวกัน ช่วง B1:CD101 โดยซ่อนคอลัมน์ I:K</td></tr>
+    <tr><td><code>QC &lt;เวลา&gt;.txt</code></td><td>บันทึกทุกอย่างที่โปรแกรมทำในรอบนั้น (ภาษาอังกฤษ)</td></tr>
+    <tr><td><code>QC &lt;เวลา&gt; (TH).txt</code></td><td>QC ฉบับภาษาไทย เนื้อหาเดียวกันทุกบรรทัด</td></tr>
+  </table>
+  </div>
+  <p class="note">แถวและคอลัมน์ที่ซ่อนอยู่ใน Excel จะไม่อยู่ในรูป เหมือนที่เห็นบนจอ</p>
+
+  <h2 id="qc">อ่าน QC report</h2>
+  <p>อ่านจากบนลงล่าง: CHECKLIST ของไฟล์, รายละเอียดของแต่ละส่วน, สิ่งที่เปลี่ยนในแต่ละ sheet, แล้วปิดท้ายด้วยตัวเลขรายงานก่อนและหลัง</p>
+  <p>แต่ละรอบมี QC สองไฟล์ที่เนื้อหาเหมือนกัน: ฉบับอังกฤษ และฉบับไทย <code>(TH)</code> ในฉบับไทย คำขึ้นต้นบรรทัด (OK, MISSING, ALERT ...)
+    ชื่อ sheet ชื่อคอลัมน์ และชื่อไฟล์ ยังเป็นภาษาอังกฤษเหมือนเดิม จึงใช้ตารางด้านล่างได้กับทั้งสองฉบับ หน้าต่างสีดำตอนรันยังแสดงเป็นภาษาอังกฤษ</p>
+  <div class="scroll">
+  <table>
+    <tr><th>คำขึ้นต้น</th><th>ความหมาย</th><th>ต้องทำอะไร</th></tr>
+    <tr><td><span class="tag ok">OK</span></td><td>ได้รับไฟล์ของส่วนนั้น พร้อมจำนวนแถว</td><td>ไม่ต้องทำอะไร</td></tr>
+    <tr><td><span class="tag stop">MISSING</span></td><td>ไม่มีไฟล์ของส่วนนั้นใน Input</td><td>ดาวน์โหลดมาเพิ่ม แล้วรันใหม่</td></tr>
+    <tr><td><span class="tag stop">UNKNOWN</span></td><td>มีไฟล์ที่โปรแกรมไม่รู้จัก หรืออ่านยี่ห้อไม่ออก</td><td>ตรวจว่าเป็นไฟล์ถูกต้อง หรือใส่ยี่ห้อในชื่อไฟล์</td></tr>
+    <tr><td><span class="tag info">LEFT OUT</span></td><td>แถวที่ตั้งใจไม่ใส่ เช่น NETA (เลิกขายแล้ว)</td><td>ไม่ต้องทำอะไร</td></tr>
+    <tr><td><span class="tag stop">ALERT</span></td><td>ไฟล์ขาด, เดือนของ export ไม่ตรงกับ workbook, หรือมีรถใน Main ที่ไม่อยู่ใน export วันนี้</td><td>หาสาเหตุก่อนตอบ Yes</td></tr>
+    <tr><td><span class="tag look">WARNING</span></td><td>เลขตัวถังซ้ำใน Main, รถอยู่ผิด sheet, หรือถ่ายรูปไม่สำเร็จ</td><td>ตรวจแถวที่ระบุ</td></tr>
+    <tr><td><span class="tag look">CHECK</span></td><td>ยอดเดือนของสอง sheet ไม่เท่ากัน หรือ showroom / model ไม่มีแถวในรายงาน (ยอดจะไม่ถูกนับ)</td><td>ตรวจใน workbook</td></tr>
+    <tr><td><span class="tag look">DIFFERENT (not changed)</span><br><span class="tag look">DIFFERENT (ไม่ได้แก้)</span></td><td>รถที่มีอยู่แล้วใน Main มีค่าต่างจาก export เช่น Status เปลี่ยนเป็น Confirm โปรแกรม<b>ไม่แก้ให้</b></td><td>ถ้าต้องการค่าใหม่ ให้แก้ใน workbook เอง</td></tr>
+    <tr><td><span class="tag info">ADDED</span></td><td>ยอดขายใหม่ที่เพิ่มลง sheet พร้อมเลขแถว</td><td>ดูว่าตรงกับยอดขายของวัน</td></tr>
+    <tr><td><span class="tag info">REMOVED</span></td><td>แถวที่ตัดออกจาก export: แถวรวม/แถวว่าง, เลขตัวถังซ้ำ, order ที่ยกเลิก</td><td>ไม่ต้องทำอะไร</td></tr>
+    <tr><td><span class="tag info">CHANGED / FILLED</span></td><td>ค่าที่โปรแกรมแก้ให้ เช่น TUCSON เป็น NEW TUCSON, Pre Date ว่างใช้ BookDate แทน</td><td>ไม่ต้องทำอะไร</td></tr>
+    <tr><td><span class="tag info">TAKEN OUT</span></td><td>รถที่ไม่อยู่ในรายงาน (ตุ๊กตุ๊ก) ถูกเอาออกจาก workbook</td><td>ไม่ต้องทำอะไร</td></tr>
+    <tr><td><span class="tag info">NOTE</span></td><td>ข้อมูลประกอบ เช่น คอลัมน์ที่ export ไม่มี หรือยี่ห้อที่ยังไม่มียอดขายเดือนนี้</td><td>อ่านผ่าน ๆ ถ้ายี่ห้อนั้นขายได้จริง แปลว่าไฟล์ขาด</td></tr>
+  </table>
+  </div>
+  <p style="margin-top:14px">ท้ายไฟล์มีส่วน <code>Report numbers (before -&gt; after)</code> เช่น</p>
+  <pre>KDC units this month         Daily Report!O31: 53 -&gt; 65
+New car sales total          Daily Report!O67: 65 -&gt; 80
+By-model month total         By Model.DATE - with MOS!AG8: 65 -&gt; 80</pre>
+  <p>ส่วนต่างควรเท่ากับจำนวนบรรทัด ADDED และ <code>New car sales total</code> ควรเท่ากับ <code>By-model month total</code></p>
+
+  <h2 id="rules">สิ่งที่โปรแกรมทำกับข้อมูล</h2>
+  <div class="grid">
+    <div class="card"><h3>Sale: เพิ่มต่อท้าย</h3><p>เพิ่มเฉพาะรถที่เลขตัวถัง (Frame#) ยังไม่มีใน sheet รถที่มีอยู่แล้วไม่ถูกแก้</p></div>
+    <div class="card"><h3>Order และ Stock: แทนที่ทั้ง sheet</h3><p>ข้อมูลใน sheet ถูกแทนด้วย export ของวันนี้ทั้งหมด order ที่ยกเลิกแล้วถูกตัดออก</p></div>
+    <div class="card"><h3>หัวตารางไม่ถูกแตะ</h3><p>โปรแกรมไม่แก้หัวคอลัมน์ของ workbook ถ้า export เรียงคอลัมน์ต่างกัน จะจัดฝั่ง export ให้ตรงเอง</p></div>
+    <div class="card"><h3>ไม่อยู่ในรายงาน</h3><p>ตุ๊กตุ๊ก (CarType <code>EV TUK TUK</code>) และ NETA ไม่ถูกใส่ลง sheet ใด</p></div>
+  </div>
+  <div class="scroll" style="margin-top:12px">
+  <table>
+    <tr><th>ยี่ห้อ</th><th>Sale</th><th>Order</th><th>Stock</th></tr>
+    <tr><td>Hyundai, Kia, Daehan, Teraco</td><td><code>KDC-CUS</code></td><td><code>SR ORDER STATUS</code></td><td rowspan="3"><code>stock kdc</code></td></tr>
+    <tr><td>Changan, Nevo, Geely (รุ่นน้ำมัน)</td><td><code>KDC X-CUS</code></td><td><code>KDCX ORDER</code></td></tr>
+    <tr><td>ยี่ห้ออื่น เช่น KR Motors</td><td><code>TOUK2+Other</code></td><td><code>SR ORDER STATUS</code></td></tr>
+    <tr><td>Dealer</td><td><code>DL-CUTOSMER</code></td><td><code>DL ORDER STATUS</code></td><td><code>STOCK DL</code></td></tr>
+    <tr><td>Geely (EV)</td><td><code>Geely sale</code></td><td><code>Geely order</code></td><td><code>Geely stock</code></td></tr>
+    <tr><td>BMW</td><td><code>BMW Sale</code></td><td><code>BMW Order</code></td><td><code>BMW Stock</code></td></tr>
+    <tr><td>MBS (Mitsubishi)</td><td><code>MBS Sale</code></td><td><code>MBS Order</code></td><td><code>MBS Stock</code></td></tr>
+  </table>
+  </div>
+
+  <h2 id="problems">แก้ปัญหา</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>ข้อความ / อาการ</th><th>วิธีแก้</th></tr>
+    <tr><td><code>Python is not installed on this PC yet</code></td><td>ดับเบิลคลิก <code>Setup.bat</code> ก่อน แล้วรัน <code>Run.bat</code> ใหม่</td></tr>
+    <tr><td><code>STOP: Main must hold exactly one workbook</code></td><td>ใน <code>Main</code> ต้องมี workbook ไฟล์เดียว ย้ายไฟล์ที่เกินออก หรือวางไฟล์หลักถ้ายังไม่มี</td></tr>
+    <tr><td><code>STOP: Input holds no export this script applies</code></td><td><code>Input</code> ว่าง หรือไฟล์ที่วางไม่ใช่ export ของรายงาน วางไฟล์ให้ถูกแล้วรันใหม่</td></tr>
+    <tr><td>กล่อง <code>The main workbook or the output is open in Excel</code></td><td>ปิดไฟล์นั้นใน Excel แล้วกด Retry</td></tr>
+    <tr><td><code>Input: the files could NOT be deleted</code></td><td>มีไฟล์ export เปิดค้างอยู่ใน Excel ปิดแล้วลบเองได้</td></tr>
+    <tr><td><code>ERROR: ...</code> ในหน้าต่างสีดำ</td><td>รอบนั้นไม่มี workbook ผลลัพธ์ และ <code>Main</code> ไม่ถูกเปลี่ยน เก็บไฟล์ <code>QC ....txt</code> ของรอบนั้นไว้ส่งให้คนดูแลโปรแกรม</td></tr>
+    <tr><td>กด Yes แทนที่ Main ไปแล้ว แต่ผลลัพธ์ผิด</td><td>ลบไฟล์ใน <code>Main</code> แล้วย้ายไฟล์ล่าสุดจาก <code>Main\previous</code> กลับมา และตัดส่วน <code>(before ...)</code> ออกจากชื่อไฟล์</td></tr>
+    <tr><td>กด Yes ลบไฟล์ Input ไปแล้ว แต่ต้องใช้อีก</td><td>กู้คืนจาก Recycle Bin</td></tr>
+  </table>
+  </div>
+
+  <h2 id="limits">ข้อจำกัดที่ควรรู้</h2>
+  <div class="grid">
+    <div class="card"><h3>ขึ้นเดือนใหม่</h3><p>โปรแกรมยังไม่ทำไฟล์เดือนใหม่ให้ ต้องเตรียม workbook ของเดือนใหม่เองแล้ววางใน <code>Main</code> ถ้าเดือนไม่ตรงจะขึ้น ALERT</p></div>
+    <div class="card"><h3>Dealer report: BEGINNING stock</h3><p>ตัวเลข BEGINNING ที่พิมพ์มือใน sheet <code>Dealer report</code> (แถว 4 ถึง 11) โปรแกรมไม่ได้อัปเดตให้</p></div>
+    <div class="card"><h3>วันที่ของรายงาน</h3><p><code>Daily Report!G3</code> เป็นสูตร <code>TODAY()</code> คอลัมน์ TODAY จึงเปลี่ยนตามวันที่เปิดไฟล์ รูป <code>.png</code> คือค่าของวันที่รัน</p></div>
+    <div class="card"><h3>รถที่มีอยู่แล้วไม่ถูกแก้</h3><p>ค่าที่เปลี่ยนในระบบหลังจากรถถูกใส่ลง sheet ยอดขายแล้ว จะขึ้นเป็น DIFFERENT เท่านั้น</p></div>
+  </div>
+
+  <h2 id="test">ทดลองรัน (ไม่กระทบ Main และ Input)</h2>
+  <p>เปิด Command Prompt ในโฟลเดอร์ <code>D:\Automation</code> แล้วพิมพ์คำสั่งด้านล่าง ผลยังออกที่ <code>output</code> ตามปกติ</p>
+  <pre>"%LOCALAPPDATA%\Programs\Python\Python313\python.exe" -X utf8 sales_report.py --keep-main --keep-input</pre>
+  <div class="scroll">
+  <table>
+    <tr><th>ตัวเลือก</th><th>ผล</th></tr>
+    <tr><td><code>--keep-main</code> / <code>--replace-main</code></td><td>ตอบ No / Yes ให้คำถามข้อแรกโดยไม่ขึ้นกล่อง</td></tr>
+    <tr><td><code>--keep-input</code> / <code>--delete-input</code></td><td>ตอบ No / Yes ให้คำถามข้อสองโดยไม่ขึ้นกล่อง</td></tr>
+    <tr><td><code>--until=2026-10-05</code></td><td>ทำรายงาน ณ วันนั้น: แถวที่วันที่หลังจากนั้นถูกตัดออก วันที่รายงานถูกตั้งเป็นวันนั้น และไม่แตะ Main กับ Input</td></tr>
+  </table>
+  </div>
+</main>
+</body>
+</html>

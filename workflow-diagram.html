@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Sales Report Diagram</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1c2733; --muted: #5b6b7c; --line: #d5dde6; --lane: #eef2f6;
+    --blue: #1f5fa8; --blue-soft: #e4eefa; --green: #1d7a4c; --green-soft: #e1f3e9;
+    --amber: #96610a; --amber-soft: #fbefd6; --red: #a8322a; --red-soft: #fbe5e2; --arrow: #55667a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --card: #1b222b; --ink: #e6ebf1; --muted: #9aa8b7; --line: #303a46; --lane: #171d25;
+      --blue: #7db4f0; --blue-soft: #1d3046; --green: #6fd09b; --green-soft: #173527;
+      --amber: #f0c36a; --amber-soft: #3a2f16; --red: #f09a92; --red-soft: #40201d; --arrow: #9aa8b7;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 36px 0 12px; }
+  p { margin: 0 0 12px; }
+  .lead { color: var(--muted); max-width: 720px; }
+  code { background: var(--lane); padding: 1px 6px; border-radius: 4px; font: 14px Consolas, monospace; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 14px 0 16px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .key { width: 22px; height: 14px; border-radius: 4px; border: 1.5px solid; display: inline-block; }
+  .key.you { background: var(--blue-soft); border-color: var(--blue); }
+  .key.script { background: var(--green-soft); border-color: var(--green); }
+  .key.file { background: var(--amber-soft); border-color: var(--amber); }
+  .key.stop { background: var(--red-soft); border-color: var(--red); }
+  .scroll { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  svg { display: block; width: 100%; min-width: 760px; height: auto; font-family: "Segoe UI", system-ui, sans-serif; }
+
+  .lane { fill: var(--lane); }
+  .lane-title { fill: var(--muted); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-anchor: middle; }
+  .node { stroke-width: 1.5; }
+  .you { fill: var(--blue-soft); stroke: var(--blue); }
+  .script { fill: var(--green-soft); stroke: var(--green); }
+  .file { fill: var(--amber-soft); stroke: var(--amber); }
+  .stop { fill: var(--red-soft); stroke: var(--red); }
+  .t { fill: var(--ink); font-size: 14.5px; font-weight: 600; text-anchor: middle; }
+  .s { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+  .lbl { fill: var(--muted); font-size: 12px; font-weight: 600; }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  .a { fill: none; stroke: var(--arrow); stroke-width: 1.6; }
+  .dash { stroke-dasharray: 5 4; }
+  .head { fill: var(--arrow); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Daily Sales Report Diagram</h1>
+  <p class="lead">One run of the daily KDC sales report, from the downloaded exports to the checked workbook.
+    Read it top to bottom; each column shows who or what does the step.</p>
+  <div class="legend">
+    <span><i class="key you"></i>Done by you</span>
+    <span><i class="key script"></i>Done by the script</span>
+    <span><i class="key file"></i>Folder or file</span>
+    <span><i class="key stop"></i>Run stops</span>
+    <span>⇢ dashed arrow: the script reads from here</span>
+  </div>
+
+  <div class="scroll">
+  <svg viewBox="0 0 1000 1320" role="img" aria-label="Flow diagram of the daily sales report run">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path class="head" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+
+    <!-- lanes -->
+    <rect class="lane" x="10" y="10" width="320" height="1300" rx="10"/>
+    <rect class="lane" x="340" y="10" width="330" height="1300" rx="10"/>
+    <rect class="lane" x="680" y="10" width="310" height="1300" rx="10"/>
+    <text class="lane-title" x="170" y="40">YOU</text>
+    <text class="lane-title" x="505" y="40">THE SCRIPT</text>
+    <text class="lane-title" x="835" y="40">FOLDERS AND FILES</text>
+
+    <!-- arrows -->
+    <path class="a" marker-end="url(#arr)" d="M295,99 H710"/>
+    <text class="lbl mid" x="505" y="91">save into</text>
+    <path class="a" marker-end="url(#arr)" d="M170,128 V170"/>
+    <path class="a" marker-end="url(#arr)" d="M295,199 H360"/>
+    <path class="a dash" marker-end="url(#arr)" d="M835,128 V199 H650"/>
+    <text class="lbl mid" x="742" y="191">reads</text>
+    <path class="a" marker-end="url(#arr)" d="M505,228 V265"/>
+    <path class="a" marker-end="url(#arr)" d="M505,323 V339"/>
+    <path class="a" marker-end="url(#arr)" d="M635,385 H710"/>
+    <text class="lbl mid" x="672" y="377">No</text>
+    <path class="a" marker-end="url(#arr)" d="M505,431 V470"/>
+    <text class="lbl" x="515" y="455">Yes</text>
+    <path class="a" marker-end="url(#arr)" d="M650,499 H710"/>
+    <path class="a" marker-end="url(#arr)" d="M505,528 V565"/>
+    <path class="a dash" marker-end="url(#arr)" d="M710,594 H650"/>
+    <path class="a" marker-end="url(#arr)" d="M505,623 V660"/>
+    <path class="a" marker-end="url(#arr)" d="M505,718 V755"/>
+    <path class="a" marker-end="url(#arr)" d="M650,784 H710"/>
+    <path class="a" marker-end="url(#arr)" d="M835,813 V889 H295"/>
+    <text class="lbl mid" x="505" y="881">you open and check</text>
+    <path class="a" marker-end="url(#arr)" d="M170,918 V954"/>
+    <path class="a" marker-end="url(#arr)" d="M295,1000 H360"/>
+    <text class="lbl mid" x="327" y="992">Yes</text>
+    <path class="a" marker-end="url(#arr)" d="M170,1046 V1100"/>
+    <text class="lbl end" x="160" y="1068">No</text>
+    <path class="a" d="M505,1029 V1075 H170"/>
+    <path class="a" marker-end="url(#arr)" d="M295,1146 H360"/>
+    <text class="lbl mid" x="327" y="1138">Yes</text>
+    <path class="a" marker-end="url(#arr)" d="M170,1192 V1246"/>
+    <text class="lbl end" x="160" y="1214">No</text>
+    <path class="a" d="M505,1175 V1221 H170"/>
+
+    <!-- row A -->
+    <rect class="node you" x="45" y="70" width="250" height="58" rx="10"/>
+    <text class="t" x="170" y="95">1. Download the exports</text>
+    <text class="s" x="170" y="114">from the sales system</text>
+    <rect class="node file" x="710" y="70" width="250" height="58" rx="4"/>
+    <text class="t" x="835" y="95">Input</text>
+    <text class="s" x="835" y="114">raw exports, no renaming needed</text>
+
+    <!-- row B -->
+    <rect class="node you" x="45" y="170" width="250" height="58" rx="10"/>
+    <text class="t" x="170" y="195">2. Double-click Run.bat</text>
+    <text class="s" x="170" y="214">starts the run</text>
+    <rect class="node script" x="360" y="170" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="195">Read and recognise each file</text>
+    <text class="s" x="505" y="214">by its columns, not its file name</text>
+
+    <!-- row C -->
+    <rect class="node script" x="360" y="265" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="290">Checklist of the 15 parts</text>
+    <text class="s" x="505" y="309">alert for every part that is missing</text>
+
+    <!-- decision D -->
+    <path class="node script" d="M505,339 L635,385 L505,431 L375,385 z"/>
+    <text class="t" x="505" y="381">KDC sales file</text>
+    <text class="t" x="505" y="399">in Input?</text>
+    <rect class="node stop" x="710" y="356" width="250" height="58" rx="29"/>
+    <text class="t" x="835" y="381">Stop: nothing applied</text>
+    <text class="s" x="835" y="400">the QC report says why</text>
+
+    <!-- row E -->
+    <rect class="node script" x="360" y="470" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="495">Fix the data</text>
+    <text class="s" x="505" y="514">clean rows · rename models · split by brand</text>
+    <rect class="node file" x="710" y="470" width="250" height="58" rx="4"/>
+    <text class="t" x="835" y="495">adjust</text>
+    <text class="s" x="835" y="514">Sales adjusted &lt;time&gt;.xlsx</text>
+
+    <!-- row F -->
+    <rect class="node script" x="360" y="565" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="590">Add the new cars to a copy of Main</text>
+    <text class="s" x="505" y="609">KDC-CUS · KDC X-CUS · TOUK2+Other</text>
+    <rect class="node file" x="710" y="565" width="250" height="58" rx="4"/>
+    <text class="t" x="835" y="590">Main</text>
+    <text class="s" x="835" y="609">the main workbook, copied not changed</text>
+
+    <!-- row G -->
+    <rect class="node script" x="360" y="660" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="685">Recalculate and check</text>
+    <text class="s" x="505" y="704">totals · duplicates · wrong month · missing rows</text>
+
+    <!-- row H -->
+    <rect class="node script" x="360" y="755" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="780">Save the run</text>
+    <text class="s" x="505" y="799">one numbered folder per run</text>
+    <rect class="node file" x="710" y="755" width="250" height="58" rx="4"/>
+    <text class="t" x="835" y="780">output \ date \ run number</text>
+    <text class="s" x="835" y="799">workbook · 2 pictures · QC report</text>
+
+    <!-- row I -->
+    <rect class="node you" x="45" y="860" width="250" height="58" rx="10"/>
+    <text class="t" x="170" y="885">3. Check the output (QC)</text>
+    <text class="s" x="170" y="904">QC report, workbook, pictures</text>
+
+    <!-- decision J -->
+    <path class="node you" d="M170,954 L295,1000 L170,1046 L45,1000 z"/>
+    <text class="t" x="170" y="996">4. Replace Main</text>
+    <text class="t" x="170" y="1014">with the output?</text>
+    <rect class="node script" x="360" y="971" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="996">Main is updated</text>
+    <text class="s" x="505" y="1015">the old one is kept in Main\previous</text>
+
+    <!-- decision K -->
+    <path class="node you" d="M170,1100 L295,1146 L170,1192 L45,1146 z"/>
+    <text class="t" x="170" y="1142">5. Delete the used</text>
+    <text class="t" x="170" y="1160">Input files?</text>
+    <rect class="node script" x="360" y="1117" width="290" height="58" rx="10"/>
+    <text class="t" x="505" y="1142">Sent to the Recycle Bin</text>
+    <text class="s" x="505" y="1161">files it did not recognise stay in Input</text>
+
+    <!-- end -->
+    <rect class="node you" x="45" y="1246" width="250" height="52" rx="26"/>
+    <text class="t" x="170" y="1269">Done</text>
+    <text class="s" x="170" y="1287">ready for the next day</text>
+  </svg>
+  </div>
+
+  <h2>Good to know</h2>
+  <div class="grid">
+    <div class="card"><h3>New PC</h3><p>Double-click <code>Setup.bat</code> once. It installs Python and the libraries; Excel must already be there.</p></div>
+    <div class="card"><h3>The two questions</h3><p>Steps 4 and 5 are pop-up boxes at the end of the run. They wait while you do the QC, and No is the default.</p></div>
+    <div class="card"><h3>Applied today</h3><p>Only the KDC sales export is put into the workbook. Other files are recognised and listed in the checklist.</p></div>
+    <div class="card"><h3>Not built yet</h3><p>Order and stock, dealer and brand sales (Geely, BMW, MBS), and the start of a new month.</p></div>
+  </div>
+</main>
+</body>
+</html>

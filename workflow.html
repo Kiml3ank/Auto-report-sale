@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Sales Report Workflow</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1c2733; --muted: #5b6b7c; --line: #d5dde6;
+    --blue: #1f5fa8; --blue-soft: #e4eefa; --green: #1d7a4c; --green-soft: #e1f3e9;
+    --amber: #96610a; --amber-soft: #fbefd6; --grey-soft: #eceff3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --card: #1b222b; --ink: #e6ebf1; --muted: #9aa8b7; --line: #303a46;
+      --blue: #7db4f0; --blue-soft: #1d3046; --green: #6fd09b; --green-soft: #173527;
+      --amber: #f0c36a; --amber-soft: #3a2f16; --grey-soft: #252d37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 44px 0 14px; }
+  p { margin: 0 0 12px; }
+  .lead { color: var(--muted); max-width: 720px; }
+  code { background: var(--grey-soft); padding: 1px 6px; border-radius: 4px; font: 14px Consolas, monospace; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+  .built { background: var(--green-soft); color: var(--green); }
+  .planned { background: var(--amber-soft); color: var(--amber); }
+  .you { background: var(--blue-soft); color: var(--blue); }
+
+  .flow { display: grid; gap: 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .num { width: 36px; height: 36px; border-radius: 50%; background: var(--blue); color: var(--card);
+         display: grid; place-items: center; font-weight: 700; flex: none; }
+  .step.person .num { background: var(--card); color: var(--blue); border: 2px solid var(--blue); }
+  .rail::after { content: ""; flex: 1; width: 2px; background: var(--line); margin: 4px 0; }
+  .step:last-child .rail::after { display: none; }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 14px; }
+  .box h3 { margin: 0 0 4px; font-size: 17px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .box p, .box ul { margin: 0; color: var(--muted); }
+  .box ul { padding-left: 18px; margin-top: 6px; }
+  .where { margin-top: 8px; font-size: 14px; color: var(--ink); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--grey-soft); font-size: 14px; }
+  tr:last-child td { border-bottom: 0; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto;
+        font: 14px/1.5 Consolas, monospace; margin: 0; }
+  .note { border-left: 4px solid var(--blue); background: var(--blue-soft); padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Daily Sales Report Workflow</h1>
+  <p class="lead">How a raw export becomes the daily KDC sales report: one report per day, built from the files
+    dropped into <code>Input</code>. The workbook in <code>Main</code> is only changed when you answer Yes at the end.
+    See also the <a href="workflow-diagram.html">flow diagram</a>.</p>
+  <p><span class="tag built">Built</span> working today &nbsp; <span class="tag planned">Planned</span> not built yet
+    &nbsp; <span class="tag you">You</span> done by a person</p>
+
+  <h2>The flow</h2>
+  <div class="flow">
+    <div class="step person">
+      <div class="rail"><div class="num">1</div></div>
+      <div class="box">
+        <h3>Drop the raw export <span class="tag you">You</span></h3>
+        <p>Save the file exactly as it comes out of the sales system. No editing needed.</p>
+        <div class="where">Folder: <code>Input</code></div>
+      </div>
+    </div>
+    <div class="step person">
+      <div class="rail"><div class="num">2</div></div>
+      <div class="box">
+        <h3>Start the run <span class="tag you">You</span></h3>
+        <p>Double-click <code>Run.bat</code>. Everything from step 3 to step 7 happens on its own.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">3</div></div>
+      <div class="box">
+        <h3>Read the file <span class="tag built">Built</span></h3>
+        <ul>
+          <li>Finds the header row, even with title lines above it or a header spread over two rows.</li>
+          <li>Matches columns by header name, so the column order in the export does not matter.</li>
+          <li>Recognises each export by its columns, not its file name, and writes a checklist of the 15 parts a full day brings (sale, order and stock for KDC, Dealer, Geely, BMW and MBS) with an alert for every part that is missing.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">4</div></div>
+      <div class="box">
+        <h3>Fix the data <span class="tag built">Built</span></h3>
+        <ul>
+          <li>Removes rows with no frame number (the total row) and frame numbers repeated in the export.</li>
+          <li>Renames models to the name the report counts: Hyundai <code>TUCSON</code> becomes <code>NEW TUCSON</code>.</li>
+          <li>Splits the rows by brand into the sheet each one belongs to (see the table below).</li>
+        </ul>
+        <div class="where">Result: <code>adjust\Sales adjusted &lt;time&gt;.xlsx</code>, with a sheet of removed rows and a sheet of changes.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">5</div></div>
+      <div class="box">
+        <h3>Apply to a copy of the main workbook <span class="tag built">Built</span></h3>
+        <ul>
+          <li>Adds only cars whose frame number is not in the workbook yet.</li>
+          <li>Cars already there are left as they are; any difference is written to the QC report.</li>
+          <li>Copies cell formats and the lookup formulas down to the new rows.</li>
+          <li>Stops without writing if the export does not look like the sheet.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">6</div></div>
+      <div class="box">
+        <h3>Recalculate and check <span class="tag built">Built</span></h3>
+        <ul>
+          <li>Excel recalculates every report sheet.</li>
+          <li>Key totals are recorded before and after.</li>
+          <li>Flags: duplicate cars, a showroom or model the report has no row for, and month totals that disagree between sheets.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="num">7</div></div>
+      <div class="box">
+        <h3>Save the results <span class="tag built">Built</span></h3>
+        <p>Each run gets its own numbered folder inside the day's folder.</p>
+        <div class="where">Folder: <code>output\&lt;date&gt;\&lt;run number&gt;</code> holding the workbook, the report pictures and the QC report.</div>
+      </div>
+    </div>
+    <div class="step person">
+      <div class="rail"><div class="num">8</div></div>
+      <div class="box">
+        <h3>QC and release <span class="tag you">You</span></h3>
+        <p>Read the QC report, check the workbook and pictures, then send the report.</p>
+      </div>
+    </div>
+    <div class="step person">
+      <div class="rail"><div class="num">9</div></div>
+      <div class="box">
+        <h3>Answer the two questions <span class="tag you">You</span></h3>
+        <ul>
+          <li><b>Replace the workbook in Main with this output?</b> Yes makes the output the main file for the next day; the old one is kept in <code>Main\previous</code>. No leaves <code>Main</code> as it is.</li>
+          <li><b>Delete the export files that were used?</b> Yes sends them to the Recycle Bin so <code>Input</code> is empty for the next day. Files the script did not recognise stay.</li>
+        </ul>
+        <p>The boxes wait, so you can finish the QC first. No is the default for both.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Folders</h2>
+  <div class="grid">
+    <div class="card"><h3>Input</h3><p>Raw exports from the system, as received.</p></div>
+    <div class="card"><h3>adjust</h3><p>The fixed version of each export, before it touches the main workbook.</p></div>
+    <div class="card"><h3>Main</h3><p>The main report workbook. Exactly one file. Only changed when you answer Yes to replacing it.</p></div>
+    <div class="card"><h3>output</h3><p>One folder per day, one numbered folder per run, for QC.</p></div>
+  </div>
+  <pre style="margin-top:12px">D:\Automation
+├─ Setup.bat               run once on a new PC: installs Python and the libraries
+├─ requirements.txt        the libraries Setup.bat installs
+├─ Run.bat                 double-click to run
+├─ sales_report.py         the script
+├─ Input\                  Sales Report.xls
+├─ adjust\                 Sales adjusted 20261006-0931.xlsx
+├─ Main\                   KDC_SPDR OCTOBER ... .xlsx
+└─ output\
+   └─ 2026-10-06\
+      ├─ 1\                workbook · Daily Report.png · KOLAOTOPIA by model.png · QC.txt
+      └─ 2\                second run of the same day</pre>
+
+  <h2>Where each brand goes (sales)</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Group</th><th>Brands</th><th>Sheet</th><th>Status</th></tr>
+    <tr><td>KDC</td><td>Hyundai, Kia, Daehan, Teraco</td><td><code>KDC-CUS</code></td><td><span class="tag built">Built</span></td></tr>
+    <tr><td>KDC-X</td><td>Changan, Nevo, Geely (fuel models)</td><td><code>KDC X-CUS</code></td><td><span class="tag built">Built</span></td></tr>
+    <tr><td>Other</td><td>Any other maker, such as KR Motors motorcycles</td><td><code>TOUK2+Other</code></td><td><span class="tag built">Built</span></td></tr>
+    <tr><td>KDC-X</td><td>Geely EV, BMW, Mitsubishi (MBS)</td><td><code>Geely sale</code>, <code>BMW Sale</code>, <code>MBS Sale</code></td><td><span class="tag planned">Planned</span></td></tr>
+    <tr><td>Dealer</td><td>Dealer sales to customers</td><td><code>DL-CUTOSMER</code></td><td><span class="tag planned">Planned</span></td></tr>
+  </table>
+  </div>
+
+  <h2>The three kinds of input</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Input</th><th>Feeds these sheets</th><th>Status</th></tr>
+    <tr><td>Sale</td><td><code>KDC-CUS</code>, <code>KDC X-CUS</code>, <code>TOUK2+Other</code></td><td><span class="tag built">Built</span></td></tr>
+    <tr><td>Order</td><td><code>SR ORDER STATUS</code>, <code>KDCX ORDER</code>, <code>DL ORDER STATUS</code>, brand order sheets</td><td><span class="tag planned">Planned</span></td></tr>
+    <tr><td>Stock</td><td><code>stock kdc</code>, <code>STOCK DL</code>, brand stock sheets</td><td><span class="tag planned">Planned</span></td></tr>
+  </table>
+  </div>
+
+  <h2>Report pictures</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Picture</th><th>Sheet</th><th>Cells</th></tr>
+    <tr><td>Daily Report</td><td><code>Daily Report</code></td><td>F1 to AJ94</td></tr>
+    <tr><td>KOLAOTOPIA by model</td><td><code>KOLAOTOPIA byModel.DAET</code></td><td>A1 to BX102, after its filter is refreshed</td></tr>
+  </table>
+  </div>
+  <p class="note">Hidden rows and columns are left out of the pictures, the same as on screen.</p>
+
+  <h2>Still to build</h2>
+  <div class="grid">
+    <div class="card"><h3>Order and stock</h3><p>Waiting for a sample export of each, and whether each day's file replaces the sheet or is added to it.</p></div>
+    <div class="card"><h3>Start a new month</h3><p>Roll the workbook over to the next month: freeze last month's totals, move the day columns, empty the sales sheets. For now the run only alerts when the export's month differs from the workbook's.</p></div>
+    <div class="card"><h3>Dealer and brand files</h3><p>Dealer, Geely, BMW and MBS exports use different column layouts and need their own samples.</p></div>
+  </div>
+</main>
+</body>
+</html>

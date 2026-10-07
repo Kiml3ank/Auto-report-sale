@@ -1,0 +1,12 @@
+# company data stays on this PC: exports, the report workbook and everything made from them
+Input/
+adjust/
+Main/
+output/
+compare/
+*.xls
+*.xlsx
+*.xlsm
+~$*
+
+__pycache__/
