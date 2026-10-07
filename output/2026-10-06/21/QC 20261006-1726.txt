@@ -1,0 +1,59 @@
+Run 20261006-1726
+Main workbook: 260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update.xlsx
+
+CHECKLIST of today's files:
+  MISSING      Sale  - KDC    
+  MISSING      Order - KDC    
+  OK           Sale  - Dealer  Sales Report DL.xls (19 rows)
+  OK           Order - Dealer  Order Status DL.xls (101 rows)
+  OK           Stock - Dealer  Stock Report DL.xls (262 rows)
+  MISSING      Sale  - Geely  
+  MISSING      Sale  - BMW    
+  OK           Sale  - MBS     Pre order-Book report KML.xls (6 rows)
+  MISSING      Order - Geely  
+  MISSING      Order - BMW    
+  MISSING      Order - MBS    
+  MISSING      Stock - Geely  
+  MISSING      Stock - BMW    
+  MISSING      Stock - MBS    
+ALERT: 10 of 14 parts are missing: Sale KDC, Order KDC, Sale Geely, Sale BMW, Order Geely, Order BMW, Order MBS, Stock Geely, Stock BMW, Stock MBS
+
+Sale Dealer - Sales Report DL.xls: 19 rows read, 18 kept, 1 removed
+REMOVED export row 19: no Frame# (total / blank row)
+Adjusted file: D:\Automation\adjust\Sale Dealer adjusted 20261006-1726.xlsx
+
+Order Dealer - Order Status DL.xls: 101 rows read, 101 kept, 0 removed
+Adjusted file: D:\Automation\adjust\Order Dealer adjusted 20261006-1726.xlsx
+
+Stock Dealer - Stock Report DL.xls: 262 rows read, 262 kept, 0 removed
+Adjusted file: D:\Automation\adjust\Stock Dealer adjusted 20261006-1726.xlsx
+
+Sale MBS - Pre order-Book report KML.xls: 6 rows read, 5 kept, 1 removed
+REMOVED export row 6: no Frame# (total / blank row)
+Adjusted file: D:\Automation\adjust\Sale MBS adjusted 20261006-1726.xlsx
+
+NOTE DL-CUTOSMER: columns the export does not have (left empty unless the sheet has a formula there): NO, Name, Department
+NOTE DL-CUTOSMER: columns matched by position, the names differ (sheet <- export): Showroom <- Dealer, Color Tone <- Tone, Std_Price <- Price, Pro_D/C <- D/C, Special_DC <- Spc_DC, Selling AMT <- sales, Modify user <- Modify name
+DL-CUTOSMER: 18 rows before, 0 added, 18 already there, 18 now
+DL ORDER STATUS: replaced with today's export - 100 rows before, 101 now (1 new, 0 no longer in the export, counted by BookNo)
+NOTE STOCK DL: columns the export does not have (left empty unless the sheet has a formula there): DL-LPB02, 5, DL-LNT01, 8
+STOCK DL: replaced with today's export - 262 rows before, 262 now (0 new, 0 no longer in the export, counted by Frame#)
+NOTE MBS Sale: columns the export does not have (left empty unless the sheet has a formula there): K0908032
+ADDED MBS Sale row 7: MK2XTGR1WVN012246 | MBS_SRM(VTE) | MITSUBISHI XFORCE | Confirm | 28600
+MBS Sale: 4 rows before, 1 added, 4 already there, 5 now
+
+Report numbers (before -> after):
+  KDC units this month         Daily Report!O31: 53 -> 53
+  KDC amount this month        Daily Report!AD31: 1118900 -> 1118900
+  CHANGAN units this month     Daily Report!O34: 3 -> 3
+  New car sales total          Daily Report!O67: 65 -> 66
+  By-model month total         By Model.DATE - with MOS!AG8: 65 -> 66
+  Report date (Daily Report!G3): 06-Oct-2026  <- formula TODAY(), so the 'TODAY' columns follow the day the file is opened
+Picture: D:\Automation\output\2026-10-06\21\Daily Report 20261006-1726.png
+Picture: D:\Automation\output\2026-10-06\21\KOLAOTOPIA by model 20261006-1726.png
+Picture: D:\Automation\output\2026-10-06\21\By model with MOS 20261006-1726.png
+Picture: D:\Automation\output\2026-10-06\21\By model sales 20261006-1726.png
+
+Output for QC: D:\Automation\output\2026-10-06\21\260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update - applied 20261006-1726.xlsx
+Main workbook: kept as it was.
+Input: files kept.

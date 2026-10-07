@@ -1,0 +1,125 @@
+Run 20261006-1533
+Main workbook: 260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update.xlsx
+TEST RUN as of 05-Oct-2026: later rows are left out, the report date is set to that day, Main and Input are left alone
+
+CHECKLIST of today's files:
+  OK           Sale  - KDC     KDC KDC-X Sales Report.xls (58 rows)
+  OK           Order - KDC     Order Status.xls (453 rows)
+  MISSING      Stock - KDC    
+  MISSING      Sale  - Dealer 
+  MISSING      Order - Dealer 
+  MISSING      Stock - Dealer 
+  OK           Sale  - Geely   Geeyl sale report.xls (6 rows)
+  OK           Sale  - BMW     Geeyl sale report.xls (0 rows)
+  OK           Sale  - MBS     KLM sale report.xls (5 rows)
+  OK           Order - Geely   Pre order-Book report.xls (45 rows)
+  OK           Order - BMW     Pre order-Book report.xls (4 rows)
+  OK           Order - MBS     Pre order-Book report MBS.xls (15 rows)
+  OK           Stock - Geely   Stock Report 1.xls (168 rows), Stock Report.xls (168 rows)  <- more than one file for this part
+  OK           Stock - BMW     Stock Report 1.xls (2 rows), Stock Report.xls (2 rows)  <- more than one file for this part
+  OK           Stock - MBS     Stock Report MBS.xls (113 rows)
+  LEFT OUT     Stock - NETA    Stock Report MBS.xls (2 rows)  (brand no longer sold)
+ALERT: 4 of 15 parts are missing: Stock KDC, Sale Dealer, Order Dealer, Stock Dealer
+
+Sale KDC: LEFT OUT 5 rows dated after the test day
+Sale KDC - KDC KDC-X Sales Report.xls: 53 rows read, 51 kept, 2 removed
+REMOVED export row 1: LZSMJLZ05RF300001 EV TUK TUK: this kind of car is not reported
+REMOVED export row 53: no Frame# (total / blank row)
+CHANGED KMHJB81CBTU490358: Model 'TUCSON' -> 'NEW TUCSON'
+Split: KDC-CUS 48, KDC X-CUS 3, TOUK2+Other 0
+Brands in the sales export: HYUNDAI 32, KIA 11, DAEHAN 5, NEVO 3
+NOTE no sales rows this month for: TERACO, CHANGAN, GEELY  (fine if they sold nothing; if they did, a download is missing)
+Adjusted file: D:\Automation\adjust\Sales adjusted 20261006-1533.xlsx
+
+Order KDC: LEFT OUT 14 rows dated after the test day
+Order KDC - Order Status.xls: 439 rows read, 438 kept, 1 removed
+REMOVED export row 439: total / blank row
+FILLED 73 rows: empty Pre Date takes the BookDate
+Split: SR ORDER STATUS 351, KDCX ORDER 87
+Adjusted file: D:\Automation\adjust\Order KDC adjusted 20261006-1533.xlsx
+
+Sale Geely - Geeyl sale report.xls: 6 rows read, 5 kept, 1 removed
+REMOVED export row 6: no Frame# (total / blank row)
+Adjusted file: D:\Automation\adjust\Sale Geely adjusted 20261006-1533.xlsx
+
+Sale MBS - KLM sale report.xls: 5 rows read, 4 kept, 1 removed
+REMOVED export row 5: no Frame# (total / blank row)
+Adjusted file: D:\Automation\adjust\Sale MBS adjusted 20261006-1533.xlsx
+
+Order Geely: LEFT OUT 1 rows dated after the test day
+Order Geely - Pre order-Book report.xls: 44 rows read, 43 kept, 1 removed
+REMOVED export row 3: cancelled order IB-GTPIA2610-0002 (Cancel Reason: Cancel(Income))
+Adjusted file: D:\Automation\adjust\Order Geely adjusted 20261006-1533.xlsx
+
+Order BMW - Pre order-Book report.xls: 4 rows read, 4 kept, 0 removed
+Adjusted file: D:\Automation\adjust\Order BMW adjusted 20261006-1533.xlsx
+
+Order MBS: LEFT OUT 1 rows dated after the test day
+Order MBS - Pre order-Book report MBS.xls: 14 rows read, 13 kept, 1 removed
+REMOVED export row 14: total / blank row
+Adjusted file: D:\Automation\adjust\Order MBS adjusted 20261006-1533.xlsx
+
+Stock Geely - Stock Report 1.xls, Stock Report.xls: 336 rows read, 168 kept, 168 removed
+REMOVED 168 x same row twice in the export files
+Adjusted file: D:\Automation\adjust\Stock Geely adjusted 20261006-1533.xlsx
+
+Stock BMW - Stock Report 1.xls, Stock Report.xls: 4 rows read, 2 kept, 2 removed
+REMOVED export row 3: same row twice in the export files
+REMOVED export row 4: same row twice in the export files
+Adjusted file: D:\Automation\adjust\Stock BMW adjusted 20261006-1533.xlsx
+
+Stock MBS - Stock Report MBS.xls: 113 rows read, 113 kept, 0 removed
+Adjusted file: D:\Automation\adjust\Stock MBS adjusted 20261006-1533.xlsx
+
+TAKEN OUT KDC-CUS row 38: LZSMJLZ05RF300001 (this kind of car is not reported)
+DIFFERENT (not changed) KDC-CUS row 38 RP0TC2D42TS030728: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 39 RP0TC2D42TS030310: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 40 RP0TC2D42TS030724: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 42 LJD5AA1DBT0262053: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 43 LSCAB12E2VG800395: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 8 RP0TC2D42TS030712: Status: main 'Wait Sales Approval' / export 'Confirm'
+DIFFERENT (not changed) KDC-CUS row 44 RP0TC2D42TS030948: Status: main 'Wait Sales Approval' / export 'Confirm'
+ADDED KDC-CUS row 46: RP0TC2D42TS030888 | ND | HYUNDAI H-100 | Confirm | 19400
+ADDED KDC-CUS row 47: LSCAB12E2VG800350 | XYBCARE | DAEHAN TERA-STAR | Confirm | 10800
+ADDED KDC-CUS row 48: RP0TC2D42TS030936 | XMKCARE | HYUNDAI H-100 | Confirm | 19500
+ADDED KDC-CUS row 49: KMHP381LHSU061578 | KDC TOPIA | HYUNDAI NEW SANTAFE | Confirm | 51500
+ADDED KDC-CUS row 50: KMHYF811BSU237657 | ND | HYUNDAI STARIA | Confirm | 45300
+ADDED KDC-CUS row 51: RP0TC2D42TS030971 | XMKCARE | HYUNDAI H-100 | Confirm | 19000
+ADDED KDC-CUS row 52: RP0TC2D42TS031035 | XKCARE | HYUNDAI H-100 | Confirm | 19000
+ADDED KDC-CUS row 53: RP0TC2D42TS030911 | KMCARE | HYUNDAI H-100 | Confirm | 19000
+KDC-CUS: 40 rows before, 8 added, 40 already there, 48 now
+KDC X-CUS: 3 rows before, 0 added, 3 already there, 3 now
+TOUK2+Other: 0 rows before, 0 added, 0 already there, 0 now
+NOTE SR ORDER STATUS: columns matched by position, the names differ (sheet <- export): Deposit <- Tel1, Deposit <- Tel2
+SR ORDER STATUS: replaced with today's export - 344 rows before, 351 now (43 new, 36 no longer in the export, counted by BookNo)
+KDCX ORDER: replaced with today's export - 79 rows before, 87 now (14 new, 6 no longer in the export, counted by BookNo)
+NOTE Geely sale: columns the export does not have (left empty unless the sheet has a formula there): Inputer, K1101085
+ADDED Geely sale row 6: LB3EH1SF1TX094056 | GEELY SRM | GEELY EX2 | Confirm | 21700
+ADDED Geely sale row 7: LB3EH1SF9TX094063 | GEELY SRM | GEELY EX2 | Confirm | 21700
+Geely sale: 3 rows before, 2 added, 3 already there, 5 now
+NOTE MBS Sale: columns the export does not have (left empty unless the sheet has a formula there): K0908032
+ADDED MBS Sale row 6: MMBJLLC10TH059363 | MBS_SRM(VTE) | MITSUBISHI TRITON | Confirm | 46000
+MBS Sale: 3 rows before, 1 added, 3 already there, 4 now
+Geely order: replaced with today's export - 58 rows before, 43 now (1 new, 16 no longer in the export, counted by BookNo)
+NOTE BMW Order: columns matched by position, the names differ (sheet <- export): CSdate <- Sale date
+BMW Order: replaced with today's export - 3 rows before, 4 now (0 new, 0 no longer in the export, counted by BookNo)
+MBS Order: replaced with today's export - 12 rows before, 13 now (2 new, 1 no longer in the export, counted by BookNo)
+Geely stock: replaced with today's export - 140 rows before, 168 now (30 new, 2 no longer in the export, counted by Frame#)
+BMW Stock: replaced with today's export - 2 rows before, 2 now (0 new, 0 no longer in the export, counted by Frame#)
+MBS Stock: replaced with today's export - 114 rows before, 113 now (0 new, 1 no longer in the export, counted by Frame#)
+
+Report numbers (before -> after):
+  KDC units this month         Daily Report!O31: 41 -> 48
+  KDC amount this month        Daily Report!AD31: 840150 -> 1039500
+  CHANGAN units this month     Daily Report!O34: 3 -> 3
+  New car sales total          Daily Report!O67: 50 -> 60
+  By-model month total         By Model.DATE - with MOS!AG8: 49 -> 60
+  Report date (Daily Report!G3): 05-Oct-2026
+Picture: D:\Automation\output\2026-10-06\17\Daily Report 20261006-1533.png
+Picture: D:\Automation\output\2026-10-06\17\KOLAOTOPIA by model 20261006-1533.png
+Picture: D:\Automation\output\2026-10-06\17\By model with MOS 20261006-1533.png
+Picture: D:\Automation\output\2026-10-06\17\By model sales 20261006-1533.png
+
+Output for QC: D:\Automation\output\2026-10-06\17\260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update - applied 20261006-1533.xlsx
+Main workbook: kept as it was.
+Input: files kept.

@@ -1,0 +1,23 @@
+Run 20261006-1406
+Main workbook: 260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update.xlsx
+
+CHECKLIST of today's files:
+  MISSING      Sale  - KDC    
+  MISSING      Order - KDC    
+  MISSING      Stock - KDC    
+  MISSING      Sale  - Dealer 
+  MISSING      Order - Dealer 
+  MISSING      Stock - Dealer 
+  NOT APPLIED  Sale  - Geely   Geeyl sale report.xls (6 rows)  (received, but this part is not built yet)
+  MISSING      Sale  - BMW    
+  MISSING      Sale  - MBS    
+  NOT APPLIED  Order - Geely   Pre order-Book report.xls (49 rows)  (received, but this part is not built yet)
+  MISSING      Order - BMW    
+  MISSING      Order - MBS    
+  MISSING      Stock - Geely  
+  MISSING      Stock - BMW    
+  MISSING      Stock - MBS    
+  UNKNOWN      Stock Report.xls: its columns match no part of the report
+ALERT: 13 of 15 parts are missing: Sale KDC, Order KDC, Stock KDC, Sale Dealer, Order Dealer, Stock Dealer, Sale BMW, Sale MBS, Order BMW, Order MBS, Stock Geely, Stock BMW, Stock MBS
+
+STOP: no KDC sales export in Input, so nothing was applied.

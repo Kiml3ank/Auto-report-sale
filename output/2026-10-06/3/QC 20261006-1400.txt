@@ -1,0 +1,61 @@
+Run 20261006-1400
+Main workbook: 260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update.xlsx
+
+CHECKLIST of today's files:
+  OK           Sale  - KDC     Sales Report.xls (45 rows)
+  MISSING      Order - KDC    
+  MISSING      Stock - KDC    
+  MISSING      Sale  - Dealer 
+  MISSING      Order - Dealer 
+  MISSING      Stock - Dealer 
+  MISSING      Sale  - Geely  
+  MISSING      Sale  - BMW    
+  NOT APPLIED  Sale  - MBS     KLM sale report.xls (5 rows)  (received, but this part is not built yet)
+  MISSING      Order - Geely  
+  MISSING      Order - BMW    
+  NOT APPLIED  Order - MBS     Pre order-Book report.xls (15 rows)  (received, but this part is not built yet)
+  MISSING      Stock - Geely  
+  MISSING      Stock - BMW    
+  MISSING      Stock - MBS    
+  UNKNOWN      Stock Report.xls: its columns match no part of the report
+ALERT: 12 of 15 parts are missing: Order KDC, Stock KDC, Sale Dealer, Order Dealer, Stock Dealer, Sale Geely, Sale BMW, Order Geely, Order BMW, Stock Geely, Stock BMW, Stock MBS
+
+Raw file: Sales Report.xls: 45 rows read, 44 kept, 1 removed
+REMOVED export row 45: no Frame# (total / blank row)
+CHANGED KMHJB81CBTU490358: Model 'TUCSON' -> 'NEW TUCSON'
+Split: KDC-CUS 41, KDC X-CUS 3, TOUK2+Other 0
+Brands in the sales export: HYUNDAI 25, KIA 11, DAEHAN 5, NEVO 3
+NOTE no sales rows this month for: TERACO, CHANGAN, GEELY  (fine if they sold nothing; if they did, a download is missing)
+Adjusted file: D:\Automation\adjust\Sales adjusted 20261006-1400.xlsx
+
+DIFFERENT (not changed) KDC-CUS row 8 RP0TC2D42TS030712: Status: main 'Wait Sales Approval' / export 'Confirm'
+ADDED KDC-CUS row 38: LZSMJLZ05RF300001 | ND | DAEHAN E7 | Wait Sales Approval | 4150
+ADDED KDC-CUS row 39: RP0TC2D42TS030728 | LPBCARE | HYUNDAI H-100 | Wait Sales Approval | 19500
+ADDED KDC-CUS row 40: RP0TC2D42TS030310 | LPBCARE | HYUNDAI H-100 | Wait Sales Approval | 19500
+ADDED KDC-CUS row 41: RP0TC2D42TS030724 | LPBCARE | HYUNDAI H-100 | Wait Sales Approval | 19500
+ADDED KDC-CUS row 42: LJD0AA29BV0425316 | T2CARE | KIA SOLUTO | Confirm | 16700
+ADDED KDC-CUS row 43: LJD5AA1DBT0262053 | ATC | KIA SELTOS | Wait Sales Approval | 27600
+ADDED KDC-CUS row 44: LSCAB12E2VG800395 | LPBCARE | DAEHAN TERA-STAR | Wait Sales Approval | 10800
+ADDED KDC-CUS row 45: RP0TC2D42TS030948 | LPBCARE | HYUNDAI H-100 | Wait Sales Approval | 19000
+ADDED KDC-CUS row 46: RP0TC2D42TS031289 | ADM | HYUNDAI H-100 | Confirm | 21500
+KDC-CUS: 32 rows before, 9 added, 32 already there, 41 now
+ADDED KDC X-CUS row 7: LS6CME0F8VB092479 | CA TOPIA | NEVO Q05 | Confirm | 21900
+ADDED KDC X-CUS row 8: LS6CME0F2VB092428 | CA TOPIA | NEVO Q05 | Confirm | 21900
+KDC X-CUS: 1 rows before, 2 added, 1 already there, 3 now
+TOUK2+Other: 0 rows before, 0 added, 0 already there, 0 now
+
+Report numbers (before -> after):
+  KDC units this month         Daily Report!O31: 32 -> 41
+  KDC amount this month        Daily Report!AD31: 681900 -> 840150
+  CHANGAN units this month     Daily Report!O34: 1 -> 3
+  New car sales total          Daily Report!O67: 39 -> 50
+  By-model month total         By Model.DATE - with MOS!AG8: 39 -> 47
+CHECK the two month totals differ: Daily Report 50 vs by-model sheet 47
+  Report date (Daily Report!G3): 06-Oct-2026  <- formula TODAY(), so the 'TODAY' columns follow the day the file is opened
+CHECK KDC-CUS row 38 LZSMJLZ05RF300001: model 'E7' has no row on the by-model sheet
+Picture: D:\Automation\output\2026-10-06\3\Daily Report 20261006-1400.png
+Picture: D:\Automation\output\2026-10-06\3\KOLAOTOPIA by model 20261006-1400.png
+
+Output for QC: D:\Automation\output\2026-10-06\3\260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update - applied 20261006-1400.xlsx
+Main workbook: REPLACED with the output. The old one is at D:\Automation\Main\previous\260905_(official)KDC_SPDR OCTOBER-01-31 ( 05.OCT.26 ) - with MOS update (before 20261006-1400).xlsx
+Input: 3 file(s) sent to the Recycle Bin: KLM sale report.xls, Pre order-Book report.xls, Sales Report.xls
