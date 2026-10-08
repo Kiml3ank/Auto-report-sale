@@ -64,6 +64,9 @@ ORDER_SHEET = {"KDC-CUS": "SR ORDER STATUS", "KDC X-CUS": "KDCX ORDER", "TOUK2+O
 # The dealer order sheet is not filled this way: there a Booking order keeps an empty Pre Date in the finished report.
 FILL_FROM = {("Order", "KDC"): [("Pre Date", "BookDate")]}
 CANCEL_COLS = ("Cancel Reason", "Cancel Date")  # an order with one of these filled is cancelled and is left out
+# the order report carries open orders only: a row with any other BookStatus (Confirm ...) is left out
+ORDER_STATUS_COL, ORDER_STATUS = "BookStatus", ("LEAD", "PRELEAD", "BOOKING")
+ORDER_STATUS_MORE = {("Order", "Dealer"): ("PREORDER",)}  # statuses kept for this part only
 TARGETS = {("Sale", "KDC"): ("add", None, 5, "Frame#"), ("Order", "KDC"): ("replace", None, 2, "BookNo"),
            ("Stock", "KDC"): ("replace", "stock kdc", 2, "Frame#"),
            ("Sale", "Dealer"): ("add", "DL-CUTOSMER", 5, "Frame#"), ("Order", "Dealer"): ("replace", "DL ORDER STATUS", 2, "BookNo"),
@@ -84,8 +87,24 @@ PICTURES = [("Daily Report", "F1:AJ94", "Daily Report"),
             ("KOLAOTOPIA byModel.DAET", "A1:BX102", "KOLAOTOPIA by model"),
             ("By Model.DATE - with MOS", "A4:CJ101", "By model with MOS"),
             ("By Model.DATE - with MOS", "B1:CD101", "By model sales", "I:K")]  # the same sheet without the stock columns
+# the last row with a title in column B that the picture ranges above were written for: when model rows are added
+# to the sheet the pictures grow by as many rows
+PICTURE_END = {"By Model.DATE - with MOS": 101, "KOLAOTOPIA byModel.DAET": 100}
+# sheets with one row per model, in a block per brand (brand in column B, model in column C, a SUM row under the
+# block). A sold model that no row counts gets a row of its own in the block of its maker; on the CHECK sheets it
+# is only pointed out.
+MODEL_SHEETS = ["By Model.DATE - with MOS", "KOLAOTOPIA byModel.DAET"]
+MODEL_SHEETS_CHECK = ["By Model.DATE"]
+MODEL_BLOCK = {"HYUNDAI": "HYUNDAI", "KIA": "KIA", "DAEHAN": "DAEHAN + TERACO", "TERACO": "DAEHAN + TERACO",
+               "CHANGAN": "CHANGAN", "NEVO": "CHANGAN", "MITSUBISHI": "MBS", "GEELY": "GEELY", "BMW": "BMW"}  # Maker -> title in column B
+SHEET_MAKER = {"Geely sale": "GEELY", "BMW Sale": "BMW", "MBS Sale": "MITSUBISHI"}  # for a sale row with no Maker
 REFILTER = ["KOLAOTOPIA byModel.DAET"]   # sheets whose saved filter is applied again after the new numbers are in
 BLANK_HEADERS ={15: "Company"}          # column P has no title on some sheets; position counted from 0
+# when the output becomes the new main workbook it takes the day of the report as its name, ready for the next
+# day: '260905_(official)... ( 05.OCT.26 ) - with MOS update' becomes '261008_(official)... ( 08.OCT.26 ) - with MOS'.
+# The file in output keeps the old name. (start of the name, the date in brackets, endings to drop)
+NAME_DAY = (re.compile(r"^\d{6}(?=_)"), re.compile(r"\(\s*\d{1,2}\.[A-Za-z]{3}\.\d{2}\s*\)"), re.compile(r"\s+update$", re.I))
+MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 MAX_COLS = 150                          # how far right to read a sheet's header row
 HELPER_SCAN = 8                          # formula columns may sit this far right of the last header
 QC_COLS = ("Showroom", "Model", "Sales date", "Selling AMT", "Status", "Cust#")
@@ -93,6 +112,15 @@ QC_CELLS = [("Daily Report", "O31", "KDC units this month"), ("Daily Report", "A
             ("Daily Report", "O34", "CHANGAN units this month"), ("Daily Report", "O67", "New car sales total"),
             ("By Model.DATE - with MOS", "AG8", "By-model month total")]
 # -----------------------------------------------------------------------------------------------
+
+
+def dated_name(stem, day):
+    """The workbook's name for the report of that day. None if the name holds no date to change."""
+    start, brackets, drop = NAME_DAY
+    if not start.search(stem) or not brackets.search(stem):
+        return None
+    stem = brackets.sub(f"( {day:%d}.{MONTHS[day.month - 1]}.{day:%y} )", start.sub(f"{day:%y%m%d}", stem))
+    return drop.sub("", stem)
 
 
 def text(v):
@@ -222,8 +250,9 @@ def split_brands(header, rows, brands, default):
     return {b: r for b, r in out.items() if r}
 
 
-def clean(header, rows, key, sheet, fills=()):
-    """For a part that replaces its sheet: drop the total row and rows that come twice, fill the columns in fills.
+def clean(header, rows, key, sheet, fills=(), statuses=ORDER_STATUS):
+    """For a part that replaces its sheet: drop the total row, cancelled orders, orders whose status is not in
+    statuses and rows that come twice, fill the columns in fills.
 
     Returns ({sheet: [row]}, removed, notes).
     """
@@ -240,6 +269,9 @@ def clean(header, rows, key, sheet, fills=()):
         cancel = next((c for c in CANCEL_COLS if c in col and text(row[col[c]][0])), None)
         if cancel:  # the finished report does not carry a cancelled order
             removed.append((n, f"cancelled order {text(row[col[key]][0])} ({cancel}: {text(row[col[cancel]][0])})", row))
+            continue
+        if ORDER_STATUS_COL in col and text(row[col[ORDER_STATUS_COL]][0]).upper() not in statuses:
+            removed.append((n, f"status '{text(row[col[ORDER_STATUS_COL]][0])}' is not reported", row))
             continue
         whole = tuple(text(v) for v, _ in row)
         if whole in seen:
@@ -604,9 +636,200 @@ def replace_rows(xl, wb, name, hr, header, rows, key, log):
         f"({len(set(now) - set(old))} new, {len(set(old) - set(now))} no longer in the export, counted by {key})")
 
 
-def apply(main_path, out_path, jobs, log, report_day=None):
+COUNT_FN = re.compile(r"(COUNTIFS|SUMIFS)\(([^()]*)\)", re.I)
+RANGE_REF = re.compile(r"^'?([^'!]+)'?!\$?([A-Z]+):\$?([A-Z]+)$")
+CELL_REF = re.compile(r"^(?:'?([^'!]+)'?!)?\$?([A-Z]+)\$?(\d+)$")
+HAND_ADD = re.compile(r"^(=.*\))\s*[+-]\s*\d+(?:\.\d+)?$")  # a formula with a number added by hand: '=COUNTIFS(...)+15'
+
+
+def col_no(letters):
+    n = 0
+    for ch in letters:
+        n = n * 26 + ord(ch) - 64
+    return n
+
+
+def read_block(ws, what):
+    """The used part of a sheet as (first row, first column, rows); what = 'Formula' or 'Value2'."""
+    used = ws.UsedRange
+    v = getattr(used, what)
+    return used.Row, used.Column, v if isinstance(v, tuple) else ((v,),)
+
+
+def cell_at(block, r, c):
+    r0, c0, v = block
+    return v[r - r0][c - c0] if 0 <= r - r0 < len(v) and 0 <= c - c0 < len(v[0]) else None
+
+
+def sale_rows(wb):
+    """The cars of every sales sheet: {sheet: (model column, [(maker, model, [cell text in capitals, ...]), ...])}."""
+    sheets = dict(SHEETS)
+    sheets.update({s: hr for mode, s, hr, _ in TARGETS.values() if mode == "add" and s})
+    names, out = [s.Name for s in wb.Worksheets], {}
+    for name, hr in sheets.items():
+        if name not in names:
+            continue
+        ws = wb.Worksheets(name)
+        head = sheet_head(ws, name, hr)
+        if KEY not in head or "Model" not in head or len(head) < 2:
+            continue
+        last = ws.UsedRange.Row + ws.UsedRange.Rows.Count - 1
+        cars = []
+        if last > hr:
+            for row in ws.Range(ws.Cells(hr + 1, 1), ws.Cells(last, len(head))).Value2:
+                if text(row[head.index(KEY)]):
+                    maker = text(row[head.index("Maker")]).upper() if "Maker" in head else ""
+                    cars.append((maker or SHEET_MAKER.get(name, ""), text(row[head.index("Model")]), [text(x).upper() for x in row]))
+        out[name] = (head.index("Model") + 1, cars)
+    return out
+
+
+def model_gaps(wb, ws, sales):
+    """Read the counting formulas of a by-model sheet and find the sold models none of them counts.
+
+    Returns (gaps, blocks, last column): gaps is {(sales sheet, model, maker): [cars, rows that could be copied
+    for it, {row: columns holding the model name}]}, blocks is {title in column B: (first row, last model row)}.
+
+    A formula such as =COUNTIFS('KDC-CUS'!$I:$I,AS$4,'KDC-CUS'!$S:$S,$C9,'KDC-CUS'!$M:$M,$B$21) is read as: counts
+    the cars of KDC-CUS whose column S is this row's own C9 (its model) and whose column M is B21, per day (AS4,
+    a number, is left out). A car is counted when one formula fits it entirely. It is a gap when the conditions
+    taken from other rows fit it but no row has its model.
+    """
+    f, v, other = read_block(ws, "Formula"), read_block(ws, "Value2"), {}
+
+    def value(sheet, c, r):
+        if sheet in (None, ws.Name):
+            return cell_at(v, r, c)
+        if sheet not in other:
+            other[sheet] = read_block(wb.Worksheets(sheet), "Value2")
+        return cell_at(other[sheet], r, c)
+
+    rules = set()  # (sales sheet, row, ((column, text), ...) from other rows, ((column, text, cell column), ...) from its own row)
+    for i, line in enumerate(f[2]):
+        r = f[0] + i
+        for cell in line:
+            if not (isinstance(cell, str) and cell.startswith("=") and "IFS(" in cell.upper()):
+                continue
+            for m in COUNT_FN.finditer(cell):
+                args = [a.strip() for a in m.group(2).split(",")]
+                if m.group(1).upper() == "SUMIFS":
+                    args = args[1:]
+                sale, fixed, own, ok = None, [], [], len(args) % 2 == 0
+                for rng, crit in zip(args[0::2], args[1::2]) if ok else ():
+                    mr, mc = RANGE_REF.match(rng), CELL_REF.match(crit)
+                    if not mr or mr.group(1) not in sales or sale not in (None, mr.group(1)):
+                        ok = False
+                        break
+                    sale, c = mr.group(1), col_no(mr.group(2))
+                    if len(crit) > 1 and crit[0] == crit[-1] == '"':
+                        fixed.append((c, text(crit[1:-1]).upper()))
+                    elif not mc:
+                        ok = False
+                        break
+                    else:
+                        val = value(mc.group(1), col_no(mc.group(2)), int(mc.group(3)))
+                        if int(mc.group(3)) == r and mc.group(1) in (None, ws.Name):
+                            own.append((c, text(val).upper(), col_no(mc.group(2))))
+                        elif not isinstance(val, (int, float)):  # a number from another row is the day of the column
+                            fixed.append((c, text(val).upper()))
+                if ok and own and all(t for _, t, *_ in fixed + own):
+                    rules.add((sale, r, tuple(fixed), tuple(own)))
+
+    blocks = {}
+    for i in range(len(v[2])):
+        r = v[0] + i
+        title = text(cell_at(v, r, 2)).upper()
+        if not title or not text(cell_at(v, r, 3)):
+            continue
+        total = re.compile(rf"SUM\(\$?[A-Z]+\$?{r}:\$?[A-Z]+\$?(\d+)\)")
+        ends = (total.search(x) for line in f[2][r + 1 - f[0]:] for x in line if isinstance(x, str) and "SUM(" in x)
+        end = next((int(m.group(1)) for m in ends if m), None)
+        if end:
+            blocks[title] = (r, end)
+
+    gaps = {}
+    for name, (model_col, cars) in sales.items():
+        mine = [x for x in rules if x[0] == name]
+        at = lambda row, c: row[c - 1] if c <= len(row) else ""
+        for maker, model, row in cars:
+            fits = [x for x in mine if all(at(row, c) == t for c, t in x[2])]
+            if not fits or not model or any(all(at(row, c) == t for c, t, _ in x[3]) for x in fits):
+                continue
+            gap = gaps.setdefault((name, model, maker), [0, set(), {}])
+            gap[0] += 1
+            gap[1] |= {x[1] for x in fits if len(x[3]) == 1 and x[3][0][0] == model_col}
+    for x in rules:  # where a row keeps its model name: column C, and a helper column on some rows
+        if len(x[3]) == 1 and x[3][0][0] == sales[x[0]][0]:
+            for gap in gaps.values():
+                if x[1] in gap[1]:
+                    gap[2].setdefault(x[1], {3}).add(x[3][0][2])
+    return gaps, blocks, f[1] + len(f[2][0]) - 1
+
+
+def add_models(wb, log):
+    """Give every sold model that a by-model sheet does not count a row of its own, in the block of its maker.
+
+    The new row is a copy of a model row of that block (formulas and format) placed inside the block's SUM range,
+    with the model name in it; the numbers typed by hand in the copied row (price, past years) are left empty.
+    """
+    sales, names = sale_rows(wb), [s.Name for s in wb.Worksheets]
+    for name in MODEL_SHEETS + MODEL_SHEETS_CHECK:
+        if name not in names:
+            continue
+        ws, seen, added = wb.Worksheets(name), set(), set()
+        while True:
+            gaps, blocks, last_col = model_gaps(wb, ws, sales)
+            if name in MODEL_SHEETS_CHECK:
+                if gaps:
+                    log(f"NOTE {name}: models sold but not counted on this sheet (the script adds no rows here): "
+                        + ", ".join(f"{maker} {model} x {gap[0]}" for (_, model, maker), gap in gaps.items()))
+                break
+            for key in added & set(gaps):
+                log(f"ALERT {name}: {key[2]} {key[1]} got a row but is still not counted - check the sheet")
+            added -= set(gaps)
+            todo = None
+            for key, (count, rows, labels) in gaps.items():
+                if key in seen:
+                    continue
+                seen.add(key)
+                sale, model, maker = key
+                title = MODEL_BLOCK.get(maker)
+                first, end = blocks.get((title or "").upper(), (0, 0))
+                rows = [r for r in rows if first <= r <= end]
+                if rows:
+                    todo = (key, max(rows), end, title, labels[max(rows)])
+                    break
+                why = (f"maker '{maker}' has no brand block in the list" if not title else
+                       f"the block '{title}' was not found" if not end else f"the block '{title}' has no row counting {sale}")
+                log(f"ALERT {name}: {count} sold {maker} {model} ({sale}) not counted and no row could be added: {why}")
+            if todo is None:
+                break
+            (sale, model, maker), t, end, title, labels = todo
+            ws.Rows(end).Insert()  # above the block's last model row, so the SUM under the block takes the new row in
+            t += t >= end
+            try:
+                ws.Rows(end).Hidden = False
+            except Exception:  # a row inside a filtered list: the filter decides
+                pass
+            # the formulas are carried over as text (R1C1 keeps them pointing at their own row), one cell at a time:
+            # on a sheet with a filter on and hidden columns a copy and paste fails and a block write lands in the
+            # wrong cells. The format is the one the inserted row took from the row above.
+            line = ws.Range(ws.Cells(t, 3), ws.Cells(t, last_col)).FormulaR1C1[0]
+            for j, x in enumerate(line, start=3):
+                if j in labels or (text(x) and text(x).upper() == text(line[0]).upper()):  # the model name, also in a helper column
+                    ws.Cells(end, j).Value2 = "'" + model
+                elif isinstance(x, str) and x.startswith("="):
+                    m = HAND_ADD.match(x)
+                    ws.Cells(end, j).FormulaR1C1 = m.group(1) if m else x
+            added.add((sale, model, maker))
+            log(f"NEW MODEL {maker} {model}: row {end} added on {name}, in the block {title} (copied from row {t}; "
+                f"price and past-year numbers are empty)")
+
+
+def apply(main_path, out_path, jobs, log, stamp, report_day=None):
     """jobs: ("add", {sheet: header row}, header, {sheet: rows}) or ("replace", sheet, header row, header, rows, key).
 
+    stamp goes in the names of the report pictures.
     report_day (an Excel day number) is for test runs: the report date cell gets that day instead of TODAY().
     """
     import pythoncom
@@ -640,6 +863,8 @@ def apply(main_path, out_path, jobs, log, report_day=None):
             xl.Calculation = calc
 
         xl.CalculateFull()
+        add_models(wb, log)
+        xl.CalculateFull()
         log("")
         log("Report numbers (before -> after):")
         for s, ref, label in QC_CELLS:
@@ -652,21 +877,18 @@ def apply(main_path, out_path, jobs, log, report_day=None):
             + ("  <- formula TODAY(), so the 'TODAY' columns follow the day the file is opened" if "TODAY" in str(g3.Formula).upper() else ""))
 
         # rows the report formulas will not pick up
-        dr, bm = wb.Worksheets("Daily Report"), wb.Worksheets("By Model.DATE - with MOS")
+        dr = wb.Worksheets("Daily Report")
         sites = {v.upper() for c in (2, 3, 4) for v in col_values(dr, c, 7, 70) if v}
-        models = {v.upper() for c in (3, 90) for v in col_values(bm, c, 9, 101) if v}
         for name in ("KDC-CUS", "KDC X-CUS"):
             if name not in state:
                 continue
             ws, hr, last, _, _, mcol = state[name]
-            if not all(c in mcol for c in ("Showroom", "Cust#", "Model")):
+            if not all(c in mcol for c in ("Showroom", "Cust#")):
                 continue
-            show, cust, model, frames = (col_values(ws, mcol[c] + 1, hr + 1, last) for c in ("Showroom", "Cust#", "Model", KEY))
+            show, cust, frames = (col_values(ws, mcol[c] + 1, hr + 1, last) for c in ("Showroom", "Cust#", KEY))
             for i, f in enumerate(frames):
                 if f and show[i].upper() not in sites and cust[i].upper() not in sites:
                     log(f"CHECK {name} row {hr + 1 + i} {f}: showroom '{show[i]}' / customer '{cust[i]}' has no row on Daily Report")
-                if f and model[i].upper() not in models:
-                    log(f"CHECK {name} row {hr + 1 + i} {f}: model '{model[i]}' has no row on the by-model sheet")
         for sheet in REFILTER:
             ws = wb.Worksheets(sheet)
             if ws.AutoFilterMode:
@@ -676,10 +898,15 @@ def apply(main_path, out_path, jobs, log, report_day=None):
         # report pictures; the chart used to export them is never saved into the workbook
         for sheet, ref, title, *hide in PICTURES:
             ws = wb.Worksheets(sheet)
+            if sheet in PICTURE_END:
+                titles = [i for i, x in enumerate(col_values(ws, 2, 1, ws.UsedRange.Row + ws.UsedRange.Rows.Count - 1), start=1) if x]
+                more = max(titles, default=0) - PICTURE_END[sheet]
+                if more > 0:
+                    ref = re.sub(r"\d+$", lambda m: str(int(m.group()) + more), ref)
             for h in hide:  # only for the picture: the workbook was saved above and is closed without saving
                 ws.Range(h).EntireColumn.Hidden = True
             rng = ws.Range(ref)
-            png = out_path.with_name(f"{title} {out_path.stem.rsplit(' ', 1)[-1]}.png")
+            png = out_path.with_name(f"{title} {stamp}.png")
             for attempt in range(5):  # the clipboard is sometimes busy
                 try:
                     rng.CopyPicture(1, 2)  # as shown on screen, bitmap
@@ -713,7 +940,8 @@ TH_LABELS = {"KDC units this month": "KDC จำนวนคันเดือ�
              "By-model month total": "ยอดรวมเดือนตามรุ่น"}
 TH = [(re.compile(p), r) for p, r in [
     (r"^Run (\S+)$", r"รอบ \1"),
-    (r"^Main workbook: REPLACED with the output\. The old one is at ", "ไฟล์หลัก: แทนที่ด้วยไฟล์ผลลัพธ์แล้ว ไฟล์เดิมอยู่ที่ "),
+    (r"^Main workbook: REPLACED with the output, now named (.+)\. The old one is at ",
+     r"ไฟล์หลัก: แทนที่ด้วยไฟล์ผลลัพธ์แล้ว ชื่อใหม่ \1 ไฟล์เดิมอยู่ที่ "),
     (r"^Main workbook: kept as it was\.$", "ไฟล์หลัก: คงไว้เหมือนเดิม"),
     (r"^Main workbook: NOT replaced \(a file was open in Excel\)\.$", "ไฟล์หลัก: ไม่ได้แทนที่ (มีไฟล์เปิดอยู่ใน Excel)"),
     (r"^Main workbook: ", "ไฟล์หลัก: "),
@@ -738,6 +966,7 @@ TH = [(re.compile(p), r) for p, r in [
     (r"no Frame# \(total / blank row\)", "ไม่มี Frame# (แถวรวม / แถวว่าง)"),
     (r"total / blank row", "แถวรวม / แถวว่าง"),
     (r"cancelled order", "order ที่ยกเลิก"),
+    (r"status '(.*?)' is not reported", r"สถานะ '\1' ไม่อยู่ในรายงาน"),
     (r"same row twice in the export files", "แถวซ้ำกันในไฟล์ export"),
     (r"Frame# (\S+) repeated in the export", r"Frame# \1 ซ้ำใน export"),
     (r"this kind of car is not reported", "รถประเภทนี้ไม่อยู่ในรายงาน"),
@@ -777,6 +1006,15 @@ TH = [(re.compile(p), r) for p, r in [
      r"CHECK ยอดรวมเดือนสองที่ไม่เท่ากัน: Daily Report \1 กับ sheet ตามรุ่น \2"),
     (r": showroom '(.*)' / customer '(.*)' has no row on Daily Report$", r": showroom '\1' / ลูกค้า '\2' ไม่มีแถวใน Daily Report"),
     (r": model '(.*)' has no row on the by-model sheet$", r": รุ่น '\1' ไม่มีแถวใน sheet ตามรุ่น"),
+    (r"^NEW MODEL (.+): row (\d+) added on (.+), in the block (.+) \(copied from row (\d+); price and past-year numbers are empty\)$",
+     r"NEW MODEL \1: เพิ่มแถว \2 ใน \3 ในกลุ่ม \4 (คัดลอกจากแถว \5; ราคาและตัวเลขปีก่อนยังว่าง)"),
+    (r"^ALERT (.+): (\d+) sold (.+) \((.+)\) not counted and no row could be added: ", r"ALERT \1: ขาย \3 \2 คัน (\4) ไม่ถูกนับ และเพิ่มแถวไม่ได้: "),
+    (r"maker '(.*?)' has no brand block in the list", r"ยี่ห้อ '\1' ไม่มีกลุ่มยี่ห้อในรายการ"),
+    (r"the block '(.*?)' was not found", r"ไม่พบกลุ่ม '\1'"),
+    (r"the block '(.*?)' has no row counting (.+)$", r"กลุ่ม '\1' ไม่มีแถวที่นับจาก \2"),
+    (r"^ALERT (.+): (.+) got a row but is still not counted - check the sheet$", r"ALERT \1: \2 เพิ่มแถวแล้วแต่ยังไม่ถูกนับ - ตรวจ sheet"),
+    (r"^NOTE (.+): models sold but not counted on this sheet \(the script adds no rows here\): ",
+     r"NOTE \1: รุ่นที่ขายแล้วแต่ sheet นี้ไม่นับ (โปรแกรมไม่เพิ่มแถวใน sheet นี้): "),
     (r"^Picture: ", "รูป: "),
     (r"^WARNING could not export the picture of ", "WARNING ถ่ายรูปไม่สำเร็จ: "),
     (r"^Output for QC: ", "ไฟล์ผลลัพธ์สำหรับ QC: "),
@@ -804,11 +1042,14 @@ def ask(question, buttons=4):
 
 
 def replace_main(main_path, out_path, stamp, log, choice):
-    """Offer to make the finished workbook the new main file. The old main is kept in Main\\previous."""
+    """Offer to make the finished workbook the new main file, named after today (see NAME_DAY).
+    The old main is kept in Main\\previous."""
+    name = dated_name(main_path.stem, dt.datetime.now())
+    target = MAIN / f"{name or main_path.stem}{main_path.suffix}"
     if choice is None:
         choice = ask("The report is ready in the output folder.\n\nCheck it first if you want (this box can wait).\n\n"
                      "Replace the workbook in Main with this output?\n\n"
-                     "Yes = Main is updated, the old one is kept in Main\\previous\nNo = Main stays as it is")
+                     f"Yes = Main is updated and named\n{target.name}\nThe old one is kept in Main\\previous\n\nNo = Main stays as it is")
     if not choice:
         log("Main workbook: kept as it was.")
         return
@@ -820,8 +1061,8 @@ def replace_main(main_path, out_path, stamp, log, choice):
         try:
             shutil.copy2(out_path, incoming)   # copy first, so Main is never left empty
             shutil.move(main_path, backup)
-            shutil.move(incoming, main_path)
-            log(f"Main workbook: REPLACED with the output. The old one is at {backup}")
+            shutil.move(incoming, target)
+            log(f"Main workbook: REPLACED with the output, now named {target.name}. The old one is at {backup}")
             return
         except PermissionError:
             incoming.unlink(missing_ok=True)
@@ -977,7 +1218,7 @@ def main():
             if mode == "add":
                 fixed, removed, changes, drop = fix(header, rows, sheet)
             else:
-                fixed, removed, notes = clean(header, rows, key, sheet, FILL_FROM.get(part, ()))
+                fixed, removed, notes = clean(header, rows, key, sheet, FILL_FROM.get(part, ()), ORDER_STATUS + ORDER_STATUS_MORE.get(part, ()))
             log(f"{kind} {src} - " + ", ".join(raw.name for raw, _, _ in got[part])
                 + f": {len(rows)} rows read, {sum(len(v) for v in fixed.values())} kept, {len(removed)} removed")
             if len(removed) <= 10:
@@ -1013,7 +1254,7 @@ def main():
             else:
                 jobs += [("replace", name, hr, header, v, key) for name, v in fixed.items()]
 
-        apply(mains[0], out_path, jobs, log, until)
+        apply(mains[0], out_path, jobs, log, stamp, until)
         log("")
         log(f"Output for QC: {out_path}")
         replace_main(mains[0], out_path, stamp, log, choice)
