@@ -94,6 +94,18 @@ PICTURES = [("Daily Report", "F1:AJ94", "Daily Report"),
 # the last row with a title in column B that the picture ranges above were written for: when model rows are added
 # to the sheet the pictures grow by as many rows
 PICTURE_END = {"By Model.DATE - with MOS": 101, "KOLAOTOPIA byModel.DAET": 100}
+# after the report: a WhatsApp folder in the run's output folder, one folder per person with what they are sent.
+# Items: the picture titles above, or "file" = the report workbook.
+WHATSAPP_DIR = "WhatsApp"
+NO_STOCK, WITH_STOCK, DAILY, TOPIA = "By model sales", "By model with MOS", "Daily Report", "KOLAOTOPIA by model"
+WHATSAPP = {  # folder = the person's name as saved in WhatsApp
+    "1 Mr.ພຸດ S&M": [NO_STOCK, DAILY, WITH_STOCK, "file"],          # S&M: also the picture with stock
+    "2 Sis Jiu KDC": [NO_STOCK, DAILY, "file"],
+    "3 ທ້າວຫນ້າ ສົມຫວັງ": [NO_STOCK, DAILY, "file"],                  # KDC-X head
+    "4 CEO": [NO_STOCK, DAILY, "file"],
+    "5 Mion": [NO_STOCK, DAILY, "file"],
+    "6 Director Kim Sungho": [TOPIA, DAILY, "file"],                # KOLAOTOPIA
+}
 # sheets with one row per model, in a block per brand (brand in column B, model in column C, a SUM row under the
 # block). A sold model that no row counts gets a row of its own in the block of its maker; on the CHECK sheets it
 # is only pointed out.
@@ -106,13 +118,17 @@ SHEET_MAKER = {"Geely sale": "GEELY", "BMW Sale": "BMW", "MBS Sale": "MITSUBISHI
 # report day are shown, all other days hidden (the weeks before stay as their WeekN total), so today's column is in
 # the picture
 DAY_SHEETS = {"By Model.DATE - with MOS": 4, "KOLAOTOPIA byModel.DAET": 4}
-MOS_HEADER = ("By Model.DATE - with MOS", 5, "as of")  # (sheet, row, start of the text): 'as of OCT 15' takes the report day
+MOS_HEADER = ("By Model.DATE - with MOS", 5, "as of")
+# models no longer sold: their row (model name in column C) is hidden on the model sheets every run; the numbers in it
+# still count in the sums
+HIDE_MODELS = ("MUFASA",)  # (sheet, row, start of the text): 'as of OCT 15' takes the report day
 REFILTER = ["KOLAOTOPIA byModel.DAET"]   # sheets whose saved filter is applied again after the new numbers are in
 BLANK_HEADERS ={15: "Company"}          # column P has no title on some sheets; position counted from 0
-# when the output becomes the new main workbook it takes the day of the report as its name, ready for the next
-# day: '260905_(official)... ( 05.OCT.26 ) - with MOS update' becomes '261008_(official)... ( 08.OCT.26 ) - with MOS'.
-# The file in output keeps the old name. (start of the name, the date in brackets, endings to drop)
-NAME_DAY = (re.compile(r"^\d{6}(?=_)"), re.compile(r"\(\s*\d{1,2}\.[A-Za-z]{3}\.\d{2}\s*\)"), re.compile(r"\s+update$", re.I))
+# the output workbook takes the day of the report as its name, and keeps it when it becomes the new main workbook:
+# '260905_(official)... ( 05.OCT.26 ) - with MOS update' becomes '261008_(official)... ( 08.OCT.26 ) - with MOS'.
+# (start of the name, the date in brackets, endings to drop)
+NAME_DAY = (re.compile(r"^\d{6}(?=_)"), re.compile(r"\(\s*\d{1,2}\.[A-Za-z]{3}\.\d{2}\s*\)"),
+            re.compile(r"(\s+-\s+applied\s+\d{8}-\d{4}|\s+update)+$", re.I))  # endings dropped: ' update', ' - applied 20261014-1805' ...
 MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 MAX_COLS = 150                          # how far right to read a sheet's header row
 HELPER_SCAN = 8                          # formula columns may sit this far right of the last header
@@ -903,6 +919,13 @@ def show_report_days(wb, day, log):
                 shown.append(c)
         first, last = (dt.datetime(1899, 12, 30) + dt.timedelta(days=heads[c - 3]) for c in (shown[0], shown[-1]))
         log(f"Day columns on {name}: {first:%d-%b} to {last:%d-%b} shown")
+    for name in MODEL_SHEETS + MODEL_SHEETS_CHECK:
+        ws = wb.Worksheets(name)
+        last = ws.UsedRange.Row + ws.UsedRange.Rows.Count - 1
+        for r, v in enumerate(col_values(ws, 3, 1, last), start=1):
+            if v.strip().upper() in HIDE_MODELS and not ws.Rows(r).Hidden:
+                ws.Rows(r).Hidden = True
+                log(f"Hidden on {name}: row {r} {v.strip()} (no longer sold)")
     name, row, start = MOS_HEADER
     ws = wb.Worksheets(name)
     heads = ws.Range(ws.Cells(row, 1), ws.Cells(row, MAX_COLS)).Value2[0]
@@ -1163,6 +1186,23 @@ def replace_main(main_path, out_path, stamp, log, choice):
                 return
 
 
+def whatsapp_folders(out_path, stamp, log):
+    """One folder per person in WHATSAPP, with copies of their pictures and the report workbook, ready to send."""
+    root = out_path.parent / WHATSAPP_DIR
+    for person, items in WHATSAPP.items():
+        folder = root / re.sub(r'[<>:"/\|?*]', "", person).strip()
+        folder.mkdir(parents=True, exist_ok=True)
+        missing = []
+        for item in items:
+            src = out_path if item == "file" else out_path.with_name(f"{item} {stamp}.png")
+            if src.exists():
+                shutil.copy2(src, folder / src.name)
+            else:
+                missing.append(item)
+        log(f"WhatsApp: {folder.name} - {len(items) - len(missing)} files" + (f"  MISSING: {', '.join(missing)}" if missing else ""))
+    log(f"WhatsApp folders: {root}")
+
+
 def recycle(paths):
     """Send files to the Windows Recycle Bin (they can be restored from there). True if it worked."""
     import ctypes
@@ -1284,7 +1324,8 @@ def main():
         day.mkdir(exist_ok=True)
         day_dir = day / str(max((int(p.name) for p in day.iterdir() if p.is_dir() and p.name.isdigit()), default=0) + 1)
         day_dir.mkdir()
-        out_path = day_dir / f"{mains[0].stem} - applied {stamp}{mains[0].suffix}"
+        report_day = dt.datetime(1899, 12, 30) + dt.timedelta(days=until) if until else dt.datetime.now()
+        out_path = day_dir / f"{dated_name(mains[0].stem, report_day) or mains[0].stem + ' - ' + f'{report_day:%d.%b.%y}'.upper()}{mains[0].suffix}"
 
         # ---- each part: fix, write to adjust, queue for the workbook
         jobs, heads, allowed_used = [], sheet_heads(mains[0]), used_sheets(mains[0])
@@ -1351,6 +1392,7 @@ def main():
         apply(mains[0], out_path, jobs, log, stamp, until)
         log("")
         log(f"Output for QC: {out_path}")
+        whatsapp_folders(out_path, stamp, log)
         replace_main(mains[0], out_path, stamp, log, choice)
         clear_input(list(dict.fromkeys(f for files in got.values() for f, _, _ in files)), log, clear)  # files it did not recognise stay
     except Exception as e:

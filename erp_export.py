@@ -615,19 +615,70 @@ def verify(path, parts, sig, log):
     return got
 
 
+# ---- which downloads --------------------------------------------------------------------------------
+def group_of(report):
+    account, menu_path = report[0], report[1]
+    if account == "DL":
+        return "DL (dealers)"
+    return {"KLM": "KLM (MBS)", "LXC": "LXC (Geely / BMW)"}.get(menu_path[0], "KDC + KDCX")
+
+
+def choose_reports():
+    """A window listing every download, all ticked: the person running it picks which to fetch.
+    Returns the chosen REPORTS, or None for Cancel."""
+    import tkinter as tk
+    root = tk.Tk()
+    root.title("ERP export - choose the data to download")
+    root.attributes("-topmost", True)
+    root.resizable(False, False)
+    tk.Label(root, text="Tick the data to download from KolaoERP into Input:", font=("Segoe UI", 10, "bold")).grid(
+        row=0, column=0, columnspan=4, padx=12, pady=(10, 6), sticky="w")
+    marks, groups = [], {}
+    for r in REPORTS:
+        groups.setdefault(group_of(r), []).append(r)
+    for col, (title, reports) in enumerate(groups.items()):
+        box = tk.LabelFrame(root, text=title, font=("Segoe UI", 9, "bold"), padx=8, pady=4)
+        box.grid(row=1, column=col, padx=6, pady=4, sticky="n")
+        for r in reports:
+            v = tk.BooleanVar(value=True)
+            tk.Checkbutton(box, text=r[3].rsplit(".", 1)[0], variable=v, font=("Segoe UI", 9)).pack(anchor="w")
+            marks.append((r, v))
+    chosen = [None]
+
+    def start():
+        chosen[0] = [r for r, v in marks if v.get()]
+        if not chosen[0]:
+            tk.messagebox.showwarning("ERP export", "Tick at least one, or press Cancel.", parent=root)
+            return
+        root.destroy()
+    import tkinter.messagebox  # noqa: F401  (used in start)
+    bar = tk.Frame(root)
+    bar.grid(row=2, column=0, columnspan=4, pady=(6, 10))
+    for text, cmd in (("All", lambda: [v.set(True) for _, v in marks]), ("None", lambda: [v.set(False) for _, v in marks]),
+                      ("Start", start), ("Cancel", root.destroy)):
+        tk.Button(bar, text=text, width=10, command=cmd, font=("Segoe UI", 9, "bold" if text == "Start" else "normal")).pack(side="left", padx=4)
+    root.bind("<Return>", lambda e: start())
+    root.eval("tk::PlaceWindow . center")
+    root.mainloop()
+    return chosen[0]
+
+
 # ---- run --------------------------------------------------------------------------------------------
-def run(log):
+def run(log, reports=REPORTS):
     cred = json.loads(CREDENTIALS.read_text(encoding="utf-8")) if CREDENTIALS.exists() else fail(
         f"{CREDENTIALS.name} is missing next to this script.")
     INPUT.mkdir(exist_ok=True)
     sig = signatures()
-    saved = []
-    for n, account in enumerate(ACCOUNTS):
+    saved, logged_in = [], False
+    for account in ACCOUNTS:
+        if not any(r[0] == account for r in reports):  # nothing chosen for this login: not logged in at all
+            continue
         c = cred.get(account) or {}
         if not c.get("user") or not c.get("password"):
             fail(f"{CREDENTIALS.name} has no user / password for {account}.")
-        login(account, c, log, ours=n > 0)
-        for acc, menu_path, code, name, parts, filters in REPORTS:
+        login(account, c, log, ours=logged_in)
+        logged_in = True
+        for acc, menu_path, code, name, parts, filters in reports:
             if acc != account:
                 continue
             check()
@@ -675,14 +726,20 @@ def main():
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except OSError:
         pass
+    # which downloads: the choice window, or all of them with --all (e.g. for a scheduled run)
+    reports = REPORTS if "--all" in sys.argv else choose_reports()
+    if reports is None:
+        print("ERP export cancelled - nothing downloaded.")
+        return False
     threading.Thread(target=_stop_window, daemon=True).start()
     log(f"ERP export {stamp}  (STOP window or Esc stops it)")
+    log("Chosen: " + ("all" if len(reports) == len(REPORTS) else ", ".join(r[3].rsplit(".", 1)[0] for r in reports)))
     ok = False
     try:
-        run(log)
+        run(log, reports)
         ok = True
         log("")
-        log(f"Done: {len(REPORTS)} files in {INPUT}")
+        log(f"Done: {len(reports)} files in {INPUT}")
     except Stopped as e:
         log("")
         log(f"STOPPED: {e}")
