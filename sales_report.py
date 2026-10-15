@@ -32,6 +32,10 @@ MAKER_SHEET = {"KIA": "KDC-CUS", "HYUNDAI": "KDC-CUS", "DAEHAN": "KDC-CUS", "TER
                "CHANGAN": "KDC X-CUS", "NEVO": "KDC X-CUS", "GEELY": "KDC X-CUS"}
 MODEL_RENAME = {("HYUNDAI", "TUCSON"): "NEW TUCSON"}  # (Maker, Model in export) -> name the report counts
 NOT_REPORTED = ("EV TUK TUK",)  # CarType of sales the report does not carry: left out, and taken out if already in the workbook
+# NEW / USED: a sheet takes USED cars only if it already holds some in the main workbook (DL / Geely / MBS orders do);
+# a sheet with NEW cars only keeps them out (a USED sale there once counted by maker but not by site: New Car Sales
+# Total 295 against 297 in the KOLAOTOPIA table). The column and the values that mean used:
+USED_COLS, USED_VALUES = ("used/new", "new/used", "new/old"), ("USED", "OLD")
 KEY = "Frame#"
 # Every export a full day should bring, for the checklist in the QC report:
 # (kind, source, sheets of the main workbook whose columns identify the export, brands sharing those columns)
@@ -98,6 +102,11 @@ MODEL_SHEETS_CHECK = ["By Model.DATE"]
 MODEL_BLOCK = {"HYUNDAI": "HYUNDAI", "KIA": "KIA", "DAEHAN": "DAEHAN + TERACO", "TERACO": "DAEHAN + TERACO",
                "CHANGAN": "CHANGAN", "NEVO": "CHANGAN", "MITSUBISHI": "MBS", "GEELY": "GEELY", "BMW": "BMW"}  # Maker -> title in column B
 SHEET_MAKER = {"Geely sale": "GEELY", "BMW Sale": "BMW", "MBS Sale": "MITSUBISHI"}  # for a sale row with no Maker
+# sheets with a column per day in this row, under Week1 ... Week5 columns: the days of the report's week up to the
+# report day are shown, all other days hidden (the weeks before stay as their WeekN total), so today's column is in
+# the picture
+DAY_SHEETS = {"By Model.DATE - with MOS": 4, "KOLAOTOPIA byModel.DAET": 4}
+MOS_HEADER = ("By Model.DATE - with MOS", 5, "as of")  # (sheet, row, start of the text): 'as of OCT 15' takes the report day
 REFILTER = ["KOLAOTOPIA byModel.DAET"]   # sheets whose saved filter is applied again after the new numbers are in
 BLANK_HEADERS ={15: "Company"}          # column P has no title on some sheets; position counted from 0
 # when the output becomes the new main workbook it takes the day of the report as its name, ready for the next
@@ -331,6 +340,46 @@ def fix(header, rows, sheet=None):
             row[col["Model"]] = (new_model, False)
         out[target].append(row)
     return out, removed, changes, drop
+
+
+def used_sheets(main_path):
+    """Sheets of the main workbook that hold at least one USED car in their NEW / USED column."""
+    where = dict(SHEETS)
+    for part, (_, sheet, hr, _) in TARGETS.items():
+        for name in [sheet] if sheet else (ORDER_SHEET.values() if part[0] == "Order" else []):
+            where[name] = hr
+    wb = openpyxl.load_workbook(main_path, read_only=True, data_only=True)
+    out = set()
+    for name, hr in where.items():
+        if name not in wb.sheetnames:
+            continue
+        head = [text(v).lower() for v in next(wb[name].iter_rows(min_row=hr, max_row=hr, max_col=MAX_COLS, values_only=True), ())]
+        cols = [i + 1 for i, h in enumerate(head) if h in USED_COLS]
+        if cols and any(text(v).upper() in USED_VALUES for (v,) in wb[name].iter_rows(min_row=hr + 1, min_col=cols[0], max_col=cols[0], values_only=True)):
+            out.add(name)
+    wb.close()
+    return out
+
+
+def keep_new(header, rows, fixed, removed, drop, allowed):
+    """USED rows out of every sheet that is not in allowed (sheets that never held USED cars)."""
+    cols = [i for i, h in enumerate(header) if text(h).lower() in USED_COLS]
+    if not cols:
+        return
+    for name, sheet_rows in fixed.items():
+        if name in allowed:
+            continue
+        kept = []
+        for row in sheet_rows:
+            if text(row[cols[0]][0]).upper() in USED_VALUES:
+                frame = text(row[header.index(KEY)][0]) if KEY in header else ""
+                removed.append((next((n for n, r in enumerate(rows, start=1) if r is row), "?"),
+                                f"{text(row[cols[0]][0])} car - {name} holds new cars only", row))
+                if frame:
+                    drop.add(frame)
+            else:
+                kept.append(row)
+        fixed[name] = kept
 
 
 def sheet_heads(main_path):
@@ -830,6 +879,42 @@ def add_models(wb, log):
                 f"price and past-year numbers are empty)")
 
 
+def show_report_days(wb, day, log):
+    """Day columns: the report's week up to the report day shown, the other days hidden. MOS header to that day."""
+    for name, row in DAY_SHEETS.items():
+        ws = wb.Worksheets(name)
+        heads = ws.Range(ws.Cells(row, 3), ws.Cells(row, MAX_COLS)).Value2[0]
+        week, days = None, []
+        for i, v in enumerate(heads, start=3):
+            if isinstance(v, str) and v.strip().lower().startswith("week"):
+                week = i
+            elif isinstance(v, float) and week:  # a date (Excel day number)
+                days.append((i, int(v), week))
+        this_week = next((w for _, d, w in days if d == day), None)
+        if this_week is None:
+            log(f"CHECK {name}: no day column for the report day - day columns left as they were")
+            continue
+        shown = []
+        for c, d, w in days:
+            show = w == this_week and d <= day
+            if ws.Columns(c).Hidden == show:
+                ws.Columns(c).Hidden = not show
+            if show:
+                shown.append(c)
+        first, last = (dt.datetime(1899, 12, 30) + dt.timedelta(days=heads[c - 3]) for c in (shown[0], shown[-1]))
+        log(f"Day columns on {name}: {first:%d-%b} to {last:%d-%b} shown")
+    name, row, start = MOS_HEADER
+    ws = wb.Worksheets(name)
+    heads = ws.Range(ws.Cells(row, 1), ws.Cells(row, MAX_COLS)).Value2[0]
+    at = [i for i, v in enumerate(heads, start=1) if isinstance(v, str) and v.strip().lower().startswith(start)]
+    if at:
+        d = dt.datetime(1899, 12, 30) + dt.timedelta(days=day)
+        ws.Cells(row, at[0]).Value2 = f"as of {MONTHS[d.month - 1]} {d.day}"
+        log(f"MOS header: 'as of {MONTHS[d.month - 1]} {d.day}'")
+    else:
+        log(f"CHECK {name}: no '{start} ...' MOS header in row {row}")
+
+
 def apply(main_path, out_path, jobs, log, stamp, report_day=None):
     """jobs: ("add", {sheet: header row}, header, {sheet: rows}) or ("replace", sheet, header row, header, rows, key).
 
@@ -879,10 +964,13 @@ def apply(main_path, out_path, jobs, log, stamp, report_day=None):
         g3 = wb.Worksheets("Daily Report").Range("G3")
         log(f"  Report date (Daily Report!G3): {(dt.datetime(1899, 12, 30) + dt.timedelta(days=float(g3.Value2))):%d-%b-%Y}"
             + ("  <- formula TODAY(), so the 'TODAY' columns follow the day the file is opened" if "TODAY" in str(g3.Formula).upper() else ""))
+        show_report_days(wb, int(float(g3.Value2)), log)
 
         # rows the report formulas will not pick up
         dr = wb.Worksheets("Daily Report")
         sites = {v.upper() for c in (2, 3, 4) for v in col_values(dr, c, 7, 70) if v}
+        # showrooms some rows name in their formulas instead, e.g. "GEELY_SVK(KDC)" counted on the Geely SVK row
+        sites |= {q.upper() for row in dr.Range("K7:M70").Formula for f in row for q in re.findall(r'"([^"]+)"', str(f))}
         for name in ("KDC-CUS", "KDC X-CUS"):
             if name not in state:
                 continue
@@ -1199,7 +1287,8 @@ def main():
         out_path = day_dir / f"{mains[0].stem} - applied {stamp}{mains[0].suffix}"
 
         # ---- each part: fix, write to adjust, queue for the workbook
-        jobs, heads = [], sheet_heads(mains[0])
+        jobs, heads, allowed_used = [], sheet_heads(mains[0]), used_sheets(mains[0])
+        log("Sheets that take USED cars (they hold some already): " + (", ".join(sorted(allowed_used)) or "none"))
         for part in todo:
             kind, src = part
             mode, sheet, hr, key = TARGETS[part]
@@ -1223,6 +1312,7 @@ def main():
                 fixed, removed, changes, drop = fix(header, rows, sheet)
             else:
                 fixed, removed, notes = clean(header, rows, key, sheet, FILL_FROM.get(part, ()), ORDER_STATUS + ORDER_STATUS_MORE.get(part, ()))
+            keep_new(header, rows, fixed, removed, drop, allowed_used)
             log(f"{kind} {src} - " + ", ".join(raw.name for raw, _, _ in got[part])
                 + f": {len(rows)} rows read, {sum(len(v) for v in fixed.values())} kept, {len(removed)} removed")
             if len(removed) <= 10:

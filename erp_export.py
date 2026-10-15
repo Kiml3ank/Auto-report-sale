@@ -38,15 +38,18 @@ SALE_STATUS = ("only", {"Confirm", "Wait Sales Approval"})     # sales: confirme
 KDC_MENU = ("Vehicle Sales", "Reports")
 KLM_MENU = ("KLM", "Vehicle Sales", "Report Vehicles")
 LXC_MENU = ("LXC", "Vehicle Sales", "Report vihicles")
-SALE_DATES = [("date", "fr_dt", "month_start"), ("date", "to_dt", "today")]
-ORDER_DATES = [("date", "book_dt_fr", "year_ago"), ("date", "book_dt_to", "today"), ("pick", "old_new", "NEW")]
+SALE_DATES = [("date", "fr_dt", "month_start"), ("date", "to_dt", "today"), ("pick", "old_new", "NEW")]  # new cars only
+# NEW / USED as the workbook always held it: sales, KDC orders and KDC / DL stock NEW only; the orders of the dealers,
+# KLM and LXC NEW and USED (no filter)
+ORDER_DATES = [("date", "book_dt_fr", "year_ago"), ("date", "book_dt_to", "today")]
+NEW_ONLY = ("pick", "old_new", "NEW")
 GEELY = {"Geely", "BMW"}  # LXC holds Geely and BMW (and BMW can have no rows)
 REPORTS = [
     # dealers (login DL)
     ("DL", KDC_MENU + ("Sales Detail",), "JSD990", "Sales Report DL.xls", {("Sale", "Dealer")},
      [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS)]),
     ("DL", KDC_MENU + ("Car Stock",), "JSD910", "Stock Report DL.xls", {("Stock", "Dealer")},
-     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE)), NEW_ONLY]),
     ("DL", KDC_MENU + ("Order Status",), "JSD970", "Order Status DL.xls", {("Order", "Dealer")},
      [("checks", "sr_cd", "all"), ("tick", "chk_dt")]),
     # KLM = MBS
@@ -67,9 +70,9 @@ REPORTS = [
     ("KDC", KDC_MENU + ("Sales Detail",), "SDB990", "Sales Report KDC KDCX.xls", {("Sale", "KDC")},
      [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS), ("checks", "car_type", ("except", EXCLUDE))]),
     ("KDC", KDC_MENU + ("Car Stock New",), "SDB915", "Stock Report KDC KDCX.xls", {("Stock", "KDC")},
-     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE)), NEW_ONLY]),
     ("KDC", KDC_MENU + ("Order Status",), "SDB970", "Order Status KDC KDCX.xls", {("Order", "KDC")},
-     [("checks", "sr_cd", "all"), ("tick", "chk_dt"), ("pick", "old_new", "NEW")]),  # a date range here keeps only 19 of ~500 open orders
+     [("checks", "sr_cd", "all"), ("tick", "chk_dt"), NEW_ONLY]),  # a date range here keeps only 19 of ~500 open orders
 ]
 QUERY_TIMEOUT = 600                     # seconds a Query may take
 # -----------------------------------------------------------------------------------------------
