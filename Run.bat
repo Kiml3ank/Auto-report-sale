@@ -8,6 +8,16 @@ if not exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
   pause
   exit /b 1
 )
+rem 1) download today's files from KolaoERP into Input (STOP window or Esc stops it)
+"%LOCALAPPDATA%\Programs\Python\Python313\python.exe" -X utf8 "%~dp0erp_export.py"
+if errorlevel 1 (
+  echo.
+  echo ERP download stopped - the report was NOT run. See the reason above.
+  echo.
+  pause
+  exit /b 1
+)
+rem 2) build the report from Input
 "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" -X utf8 "%~dp0sales_report.py"
 echo.
 pause

@@ -1,0 +1,699 @@
+"""Downloads today's exports from KolaoERP into Input, ready for sales_report.py.
+
+  1. starts KolaoERP and logs in with the account in credentials.json
+  2. opens each report (the dealers, then KLM = MBS, LXC = Geely, KDC/KDCX), sets its filters, presses Query and exports it as Excel (Xls)
+  3. checks every file: saved, has rows, and sales_report.py recognises it as the part it should be
+
+STOP: the small red window on top, or the Esc key, stops the run at once. The script also stops by itself as soon as
+something is not what it expects (a window that does not open, a filter that does not take, an empty or unknown file).
+It only uses Query and Export in the ERP - never New, Save or Delete.
+"""
+import ctypes
+import datetime as dt
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+INPUT = ROOT / "Input"
+CREDENTIALS = ROOT / "credentials.json"
+
+# ---- settings ---------------------------------------------------------------------------------
+ERP_SHORTCUT = r"C:\Users\Public\Desktop\KolaoERP.lnk"
+ERP_PROCESS = "System8.Load.exe"
+MAIN_TITLE = "KolaoERP Local"           # the main window's title ends with this
+ACCOUNTS = ["DL", "KDC"]                # logins in credentials.json, in this order: the dealers first (their stock moves fastest)
+EXCLUDE = {"MC", "EV MC", "EV TRUCK", "EV TUK TUK"}            # car / parts types the report does not carry
+SALE_STATUS = ("only", {"Confirm", "Wait Sales Approval"})     # sales: confirmed and waiting for approval
+# each report: (account, menu path, form code, file name in Input, parts sales_report may recognise in it, filters).
+# Filters, applied in this order:
+#   ("checks", field, rule)  a drop-down check list: "all", ("only", {names}) or ("except", {names})
+#   ("pick", field, value)   a drop-down with one choice, e.g. NEW
+#   ("date", field, day)     "month_start" (1st of this month), "today", "year_ago" (today one year back)
+#   ("tick" / "untick", field)  a tick box
+KDC_MENU = ("Vehicle Sales", "Reports")
+KLM_MENU = ("KLM", "Vehicle Sales", "Report Vehicles")
+LXC_MENU = ("LXC", "Vehicle Sales", "Report vihicles")
+SALE_DATES = [("date", "fr_dt", "month_start"), ("date", "to_dt", "today")]
+ORDER_DATES = [("date", "book_dt_fr", "year_ago"), ("date", "book_dt_to", "today"), ("pick", "old_new", "NEW")]
+GEELY = {"Geely", "BMW"}  # LXC holds Geely and BMW (and BMW can have no rows)
+REPORTS = [
+    # dealers (login DL)
+    ("DL", KDC_MENU + ("Sales Detail",), "JSD990", "Sales Report DL.xls", {("Sale", "Dealer")},
+     [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS)]),
+    ("DL", KDC_MENU + ("Car Stock",), "JSD910", "Stock Report DL.xls", {("Stock", "Dealer")},
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+    ("DL", KDC_MENU + ("Order Status",), "JSD970", "Order Status DL.xls", {("Order", "Dealer")},
+     [("checks", "sr_cd", "all"), ("tick", "chk_dt")]),
+    # KLM = MBS
+    ("KDC", KLM_MENU + ("[KLM]Sale details",), "KLR200", "Sales Report KLM.xls", {("Sale", "MBS")},
+     [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS), ("checks", "car_type", ("except", EXCLUDE))]),
+    ("KDC", KLM_MENU + ("[KLM]Car stock detail",), "KLR100", "Stock Report KLM.xls", {("Stock", "MBS")},
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+    ("KDC", KLM_MENU + ("[KLM]Booking details",), "KLR300", "Order Report KLM.xls", {("Order", "MBS")},
+     [("checks", "sr_cd", "all"), *ORDER_DATES]),
+    # LXC = Geely (+ BMW)
+    ("KDC", LXC_MENU + ("[BMW]Sale detail",), "BMR200", "Sales Report LXC.xls", {("Sale", b) for b in GEELY},
+     [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS), ("checks", "car_type", ("except", EXCLUDE))]),
+    ("KDC", LXC_MENU + ("[BMW]Car stock detail",), "BMR100", "Stock Report LXC.xls", {("Stock", b) for b in GEELY},
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+    ("KDC", LXC_MENU + ("[BMW]Booking detail",), "BMR300", "Order Report LXC.xls", {("Order", b) for b in GEELY},
+     [("checks", "sr_cd", "all"), *ORDER_DATES]),
+    # KDC + KDCX
+    ("KDC", KDC_MENU + ("Sales Detail",), "SDB990", "Sales Report KDC KDCX.xls", {("Sale", "KDC")},
+     [("checks", "wh_cd", "all"), *SALE_DATES, ("checks", "stat_bc", SALE_STATUS), ("checks", "car_type", ("except", EXCLUDE))]),
+    ("KDC", KDC_MENU + ("Car Stock New",), "SDB915", "Stock Report KDC KDCX.xls", {("Stock", "KDC")},
+     [("checks", "sr_cd", "all"), ("checks", "itm_ty", ("except", EXCLUDE))]),
+    ("KDC", KDC_MENU + ("Order Status",), "SDB970", "Order Status KDC KDCX.xls", {("Order", "KDC")},
+     [("checks", "sr_cd", "all"), ("tick", "chk_dt"), ("pick", "old_new", "NEW")]),  # a date range here keeps only 19 of ~500 open orders
+]
+QUERY_TIMEOUT = 600                     # seconds a Query may take
+# -----------------------------------------------------------------------------------------------
+
+
+class Stopped(Exception):
+    pass
+
+
+# ---- stop button / Esc ----------------------------------------------------------------------------
+_stop = threading.Event()
+_stop_reason = ["pressed STOP"]
+
+
+def _stop_window():
+    import tkinter as tk
+    root = tk.Tk()
+    root.overrideredirect(True)  # no title bar: a small box
+    root.attributes("-topmost", True)
+    # top right, over the empty right end of the ERP ribbon: clear of the menus, lists and save windows the run uses
+    root.geometry(f"260x64+{root.winfo_screenwidth() - 280}+100")
+    box = tk.Frame(root, bg="#c62828", bd=0)
+    box.pack(fill="both", expand=True)
+    tk.Button(box, text="STOP  (Esc)", font=("Segoe UI", 13, "bold"), bg="#c62828", fg="white", activebackground="#8e0000",
+              bd=0, command=_stop.set).pack(fill="x", padx=4, pady=(4, 0))
+    tk.Label(box, text="ERP download running - don't touch mouse / keyboard", font=("Segoe UI", 8), bg="#c62828",
+             fg="white").pack(padx=4, pady=(0, 4))
+
+    def poll():
+        if ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000:  # Esc held down
+            _stop_reason[0] = "pressed Esc"
+            _stop.set()
+        if _stop.is_set():
+            root.destroy()
+        else:
+            root.after(50, poll)
+    poll()
+    root.mainloop()
+
+
+def check():
+    """Called between all steps: stops the run when STOP or Esc was pressed."""
+    if _stop.is_set():
+        raise Stopped(f"You {_stop_reason[0]}.")
+
+
+def wait(seconds):
+    end = time.time() + seconds
+    while time.time() < end:
+        check()
+        time.sleep(0.05)
+
+
+def fail(msg):
+    raise Stopped(msg)
+
+
+# ---- ERP helpers ------------------------------------------------------------------------------------
+def desk(backend="win32"):
+    from pywinauto import Desktop
+    return Desktop(backend=backend)
+
+
+def main_window(patience=10):
+    """The ERP main window; while it redraws (a form opening) it can be missing for a moment, so look again for a while."""
+    end = time.time() + patience
+    while True:
+        ws = [w for w in desk().windows() if w.window_text().endswith(MAIN_TITLE) and w.class_name().startswith("WindowsForms10")]
+        if ws or time.time() > end:
+            return ws[0] if ws else None
+        check()
+        time.sleep(0.5)
+
+
+def erp_running():
+    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {ERP_PROCESS}", "/NH"], capture_output=True, text=True).stdout
+    return ERP_PROCESS.lower() in out.lower()
+
+
+def message_boxes():
+    """Error or warning boxes the ERP shows (standard Windows dialogs other than the save box)."""
+    return [w for w in desk().windows() if w.is_visible() and w.class_name() == "#32770"]
+
+
+def popups():
+    """Drop-down lists and the like: ERP windows without a title of their own."""
+    return [w for w in desk().windows() if w.is_visible() and w.class_name().startswith("WindowsForms10")
+            and MAIN_TITLE not in w.window_text() and w.window_text() == ""]
+
+
+def click_at(rect, dx=None):
+    from pywinauto import mouse
+    x = rect.right - 10 if dx is None else rect.left + dx
+    mouse.click(coords=(x, (rect.top + rect.bottom) // 2))
+
+
+def form(code):
+    w = main_window() or fail("The ERP window closed.")
+    fs = [c for c in w.descendants() if c.element_info.automation_id == code]
+    return fs[0] if fs else None
+
+
+def field(code, name):
+    f = form(code) or fail(f"Form {code} is not open.")
+    fs = [c for c in f.descendants() if c.element_info.automation_id == name]
+    return fs[0] if fs else fail(f"Form {code} has no field '{name}' - the ERP screen changed.")
+
+
+def login(account, cred, log, ours=False):
+    """ours: the ERP open now was started by this run (the previous login), so it is closed without asking."""
+    if erp_running() and ours:
+        subprocess.run(["taskkill", "/IM", ERP_PROCESS, "/F"], capture_output=True)
+        wait(3)
+    if erp_running():
+        from sales_report import ask
+        if not ask("KolaoERP is already open.\n\nClose it and log in again for the download?\n"
+                   "(Anything not saved in the ERP is lost.)"):
+            fail("KolaoERP was already open and you chose not to close it.")
+        subprocess.run(["taskkill", "/IM", ERP_PROCESS, "/F"], capture_output=True)
+        wait(3)
+    log(f"Starting KolaoERP, login {account} ({cred['user']})")
+    os.startfile(ERP_SHORTCUT)
+    lg = desk().window(title="Login", class_name_re="WindowsForms10.*")
+    for _ in range(120):
+        check()
+        if lg.exists() and lg.is_visible():
+            break
+        time.sleep(0.5)
+    else:
+        fail("The ERP login window did not open within a minute.")
+    wait(1)
+    lg.set_focus()
+    lg.child_window(auto_id="id").set_edit_text(cred["user"])
+    pwd = lg.child_window(auto_id="pwd")
+    pwd.set_edit_text(cred["password"])
+    pwd.set_focus()
+    pwd.type_keys("{ENTER}")
+    for _ in range(120):
+        check()
+        if message_boxes():
+            box = message_boxes()[0]
+            fail(f"Login {account} refused: {box.window_text()} {' '.join(c.window_text() for c in box.children())}")
+        if main_window(patience=0) and not lg.exists():
+            break
+        time.sleep(0.5)
+    else:
+        fail(f"Login {account} did not finish within a minute (wrong password in credentials.json?).")
+    wait(2)
+    main_window().set_focus()
+
+
+def menu_bar():
+    """The ERP window for UI automation, with its menu bar unfolded."""
+    from pywinauto import mouse
+    main_window().set_focus()
+    wait(0.3)
+    w = desk("uia").window(title_re=f".*{MAIN_TITLE}").wrapper_object()
+    shown = lambda: any(c.parent().window_text() == "MenuStrip1" and c.rectangle().width() > 0
+                        for c in w.descendants(control_type="MenuItem"))
+    if not shown():  # after login the ribbon is folded: the small arrow at the right end of its tab row unfolds it
+        tabs = [c for c in w.descendants(control_type="Tab") if c.window_text() == "Ribbon Tabs"]
+        if not tabs:
+            fail("The ERP ribbon was not found.")
+        r = tabs[0].rectangle()
+        mouse.click(coords=(r.right - 16, (r.top + r.bottom) // 2))
+        wait(1.5)
+        if not shown():
+            fail("The ERP menu bar did not open (top-right arrow of the ribbon).")
+    return w
+
+
+def menu(*names):
+    """Clicks through the menu bar by name, e.g. menu('KLM', 'Vehicle Sales', 'Report Vehicles', '[KLM]Sale details').
+    Each name is looked for only inside the item clicked before it: several menus have sub-menus of the same name."""
+    from pywinauto import mouse
+    w = menu_bar()
+    level = [c for c in w.descendants(control_type="MenuItem") if c.parent().window_text() == "MenuStrip1"]
+    for name in names:
+        check()
+        it = [c for c in level if c.window_text() == name]
+        if not it:
+            fail(f"Menu item '{name}' not found - the ERP menu changed.")
+        r = it[0].rectangle()
+        mouse.click(coords=((r.left + r.right) // 2, (r.top + r.bottom) // 2))
+        wait(0.8)
+        level = it[0].children(control_type="MenuItem")
+
+
+def open_report(path, code):
+    """Opens the report at that menu path and waits for its form."""
+    menu(*path)
+    for _ in range(60):
+        check()
+        if form(code):
+            wait(1.5)
+            return
+        time.sleep(0.5)
+    fail(f"'{' -> '.join(path)}' did not open.")
+
+
+def close_report(code):
+    """File -> Close closes the report in front (the one just exported), so the next one starts fresh."""
+    menu("File", "Close")
+    for _ in range(20):
+        if not form(code):
+            return
+        wait(0.5)
+    fail("The report did not close.")
+
+
+def set_checks(code, name, rule):
+    """Sets a drop-down check list and presses OK. Returns (ticked names, number of items).
+
+    The list only shows the script the items scrolled into view, so it ticks '(All)' (which reaches every item), then
+    scrolls through the whole list to untick / tick single items, and reads every item back the same way."""
+    from pywinauto import mouse
+    if rule == "all":
+        want = lambda n: True
+    else:
+        how, names = rule
+        want = (lambda n: n in names) if how == "only" else (lambda n: n not in names)
+    main_window().set_focus()  # the clicks below go to the screen: the ERP must be in front
+    wait(0.2)
+    click_at(field(code, name).rectangle())
+    pop = None
+    for _ in range(25):
+        wait(0.2)
+        ps = popups()
+        if ps:
+            pop = ps[0]
+            break
+    if pop is None:
+        fail(f"The list '{name}' did not open.")
+    u = desk("uia").window(handle=pop.handle).wrapper_object()
+    boxes = lambda: {c.window_text(): c for c in u.descendants(control_type="CheckBox")}
+    for _ in range(25):  # wait for the items
+        if len(boxes()) > 1:
+            break
+        wait(0.2)
+    else:
+        fail(f"The list '{name}' is empty.")
+    lst = [c for c in pop.children() if c.class_name().startswith("WindowsForms10.Window.8")]
+    area = (lst[0] if lst else pop).rectangle()
+    centre = ((area.left + area.right) // 2, (area.top + area.bottom) // 2)
+
+    def scroll(steps):
+        mouse.scroll(coords=centre, wheel_dist=steps)
+        time.sleep(0.1)
+
+    def top():  # a big wheel turn is not applied in full: scroll up in steps until '(All)' is in view
+        for _ in range(60):
+            if "(All)" in boxes():
+                return
+            scroll(10)
+        fail(f"Could not scroll to the top of the list '{name}'.")
+
+    def sweep(act=None):
+        """Top to bottom through the whole list; act(name, box) on each item seen. Returns {name: state}."""
+        top()
+        seen, still = {}, 0
+        while still < 2:
+            check()
+            new = False
+            for n, c in boxes().items():
+                if n == "(All)" or not n:
+                    continue
+                if act:
+                    act(n, c)
+                if n not in seen:
+                    new = True
+                seen[n] = c.get_toggle_state()
+            still = 0 if new else still + 1
+            scroll(-8)
+        return seen
+
+    def visible():
+        return {n: c.get_toggle_state() for n, c in boxes().items() if n and n != "(All)"}
+
+    def bottom():
+        """To the end of the list: the scroll bar's handle (at the top of its bar after top()) is dragged down in one
+        go - fast even for the hundreds of showrooms of KDC Order Status; the wheel then makes sure nothing follows."""
+        x = area.right - 9
+        mouse.press(coords=(x, area.top + 26))
+        time.sleep(0.2)
+        for y in range(area.top + 40, area.bottom + 40, 60):
+            mouse.move(coords=(x, y))
+            time.sleep(0.03)
+        mouse.release(coords=(x, area.bottom + 40))
+        wait(0.6)
+        for _ in range(400):  # some lists hold hundreds of showrooms
+            last = list(visible())[-1:]
+            scroll(-60)
+            if list(visible())[-1:] == last:
+                return
+        fail(f"Could not scroll to the end of the list '{name}'.")
+
+    state = None
+    if rule == "all" or rule[0] == "except":
+        # Showroom / Dealer / Car Type: (All) first. Checked at the top and at the end of the list: the end is where
+        # items were missed before, when only the items in view were ticked
+        for _ in range(2):  # (All) ticks the list, or clears it when it was all ticked already: then once more
+            top()
+            boxes()["(All)"].click_input()
+            wait(0.4)
+            if all(v == 1 for v in visible().values()):
+                break
+        bottom()
+        if not all(v == 1 for v in visible().values()):
+            fail(f"'(All)' did not tick the whole list '{name}' (the end of the list is not ticked).")
+
+    def act(n, c):
+        if c.get_toggle_state() != int(want(n)):
+            c.toggle()
+            time.sleep(0.05)
+    if rule != "all":
+        # Car Type: one pass down the list unticks the ones left out. Status: no (All) - the same pass ticks the
+        # wanted ones and unticks any other. The pass reads every item back as it goes
+        state = sweep(act)
+    ok = [c for c in pop.children() if c.window_text() == "OK"]
+    if not ok:
+        fail(f"The list '{name}' has no OK button.")
+    if state is None:  # 'all': (All) was pressed and checked
+        ok[0].click_input()
+        wait(0.8)
+        return ["(All)"], "all"
+    if rule[0] == "only" and not rule[1] <= set(state):
+        fail(f"The list '{name}' has no {sorted(rule[1] - set(state))}.")
+    wrong = [n for n, v in state.items() if v != int(want(n))]
+    if not state or wrong:
+        fail(f"Could not set the list '{name}': {wrong or 'no items'}.")
+    ok[0].click_input()
+    wait(0.8)
+    return [n for n, v in state.items() if v], len(state)
+
+
+def ticked(ctrl, box_left=False):
+    """A DevExpress tick box shows no state to UI automation: its square is dark when ticked.
+    The square sits at the right end of the control ('All' [x]) or, with box_left, the left end ([x] Open after saving)."""
+    from PIL import ImageGrab
+    r = ctrl.rectangle()
+    x = r.left if box_left else r.right - 22
+    box = ImageGrab.grab((x, r.top, x + 22, r.bottom)).convert("L")
+    return sum(1 for p in box.getdata() if p < 90) >= 6
+
+
+def tick(code, name, on=True):
+    c = field(code, name)
+    if ticked(c) != on:
+        c.click_input()
+        wait(0.6)
+    if ticked(c) != on:
+        fail(f"Could not {'tick' if on else 'untick'} '{name}'.")
+
+
+def edit_box(code, name):
+    boxes = [c for c in field(code, name).descendants() if "EDIT" in c.class_name()]
+    return boxes[0] if boxes else fail(f"'{name}' has no text box.")
+
+
+def pick(code, name, value):
+    """A drop-down with one choice (NEW / USED): opens it, clicks the item by name, reads the box back."""
+    main_window().set_focus()
+    wait(0.2)
+    click_at(field(code, name).rectangle())
+    wait(1)
+    ps = popups()
+    if not ps:
+        fail(f"The list '{name}' did not open.")
+    items = [c for c in desk("uia").window(handle=ps[0].handle).wrapper_object().descendants(control_type="ListItem")
+             if c.window_text() == value]
+    if not items:
+        fail(f"The list '{name}' has no '{value}'.")
+    items[0].click_input()
+    wait(0.8)
+    if edit_box(code, name).window_text() != value:
+        fail(f"'{name}' did not take '{value}'.")
+
+
+def day_for(rule):
+    today = dt.date.today()
+    if rule == "month_start":
+        return today.replace(day=1)
+    if rule == "year_ago":  # 29 Feb has no day a year back: 28 Feb
+        return today.replace(year=today.year - 1, day=28) if (today.month, today.day) == (2, 29) else today.replace(year=today.year - 1)
+    return today
+
+
+def set_date(code, name, rule):
+    """Types the date (M/D/YYYY, as the ERP shows it) and reads it back."""
+    day = day_for(rule)
+    text = f"{day.month}/{day.day}/{day.year}"
+    box = edit_box(code, name)
+    if not box.is_enabled():
+        fail(f"The date '{name}' is greyed out.")
+    box.click_input()
+    wait(0.2)
+    # a masked box filled part by part: Home, then month, day and year as digits (MMDDYYYY) - typed slashes or a
+    # select-all are not understood by it
+    box.type_keys("{HOME}")
+    box.type_keys(f"{day.month:02}{day.day:02}{day.year}")
+    box.type_keys("{TAB}")
+    wait(0.6)
+    if box.window_text() != text:
+        fail(f"The date '{name}' shows '{box.window_text()}', not {text}.")
+    return text
+
+
+def responsive(w):
+    """True when the ERP window answers messages (it hangs while a Query runs)."""
+    res = ctypes.c_ulong()
+    return bool(ctypes.windll.user32.SendMessageTimeoutW(w.handle, 0, 0, 0, 0x2, 1000, ctypes.byref(res)))
+
+
+def query(log):
+    w = main_window()
+    btn = desk("uia").window(title_re=f".*{MAIN_TITLE}").child_window(title="Query(Q)", control_type="Button", found_index=0)
+    btn.click_input()
+    start = time.time()
+    wait(2)
+    calm = 0
+    while calm < 3:  # answering for 3 s in a row = done
+        check()
+        if message_boxes():
+            box = message_boxes()[0]
+            fail(f"The ERP showed a message after Query: {box.window_text()} {' '.join(c.window_text() for c in box.children())}")
+        if time.time() - start > QUERY_TIMEOUT:
+            fail(f"Query took longer than {QUERY_TIMEOUT // 60} minutes.")
+        calm = calm + 1 if responsive(w) else 0
+        wait(1)
+    log(f"  Query done in {time.time() - start:.0f} s")
+
+
+def export(code, path, log=print):
+    """Right-click the grid -> Export... -> Excel (Xls) ..., saved at path."""
+    from pywinauto import mouse
+    if path.exists():
+        path.unlink()
+    t0 = time.time()
+    g = field(code, "Grid1").rectangle()
+    mouse.right_click(coords=((g.left + g.right) // 2, g.top + 120))
+    for _ in range(50):  # until the menu is there (not a fixed pause); a busy ERP can take a few seconds
+        wait(0.2)
+        menus = [e for e in desk("uia").windows() if e.element_info.control_type == "Menu"]
+        item = [c for m in menus for c in m.descendants() if c.window_text() == "Export..."]  # by name: the same menu has Paste / Delete
+        if item:
+            break
+    else:
+        fail("The right-click menu has no 'Export...'.")
+    item[0].click_input()
+    box = desk().window(title="Export", class_name_re="WindowsForms10.*")
+    for _ in range(40):
+        check()
+        if box.exists() and box.is_visible():
+            break
+        time.sleep(0.5)
+    else:
+        fail("The Export window did not open.")
+    t1 = time.time()
+    keep_closed = box.child_window(auto_id="chk_open")  # 'Open after saving' would start Excel: untick it first
+    if ticked(keep_closed, box_left=True):
+        keep_closed.click_input()
+        wait(0.4)
+    if ticked(keep_closed, box_left=True):
+        fail("Could not untick 'Open after saving' in the Export window.")
+    box.child_window(auto_id="btn_xls").click_input()  # 'Excel (Xls) ...': the .xls the report is built on
+    for _ in range(50):  # until the save window is there
+        wait(0.2)
+        saves = message_boxes()
+        if saves:
+            wait(0.3)  # let it finish drawing before typing into it
+            break
+    else:
+        fail("The save window did not open.")
+    save = desk().window(handle=saves[0].handle)
+    t2 = time.time()
+    name_box = save.child_window(class_name="Edit", found_index=0)
+    name_box.set_edit_text(str(path))
+    wait(0.3)
+    save.child_window(title_re="&Save|Save", class_name="Button").click()  # pressed as a control: nothing on top can block it
+    for attempt in range(2):  # the press does not always register: then Enter in the file name box
+        for _ in range(4):  # a press that works closes the window well within 2 s
+            if not save.exists():
+                break
+            wait(0.5)
+        else:
+            if attempt == 0:
+                save.set_focus()
+                name_box.set_focus()
+                name_box.type_keys("{ENTER}")
+                log("  (Save press did not register - pressed Enter)")
+                continue
+            fail("The save window did not close after Save and Enter.")
+        break
+    for _ in range(360):
+        check()
+        if path.exists() and path.stat().st_size > 0:
+            break
+        time.sleep(0.5)
+    else:
+        fail(f"{path.name} was not saved within 3 minutes.")
+    t3 = time.time()
+    size = -1
+    while size != path.stat().st_size:  # written completely once the size stops changing
+        size = path.stat().st_size
+        wait(0.4)
+    if box.exists():
+        box.child_window(auto_id="btn_exit").click_input()
+        wait(0.5)
+    log(f"  export timing: open Export {t1 - t0:.1f}s, open save window {t2 - t1:.1f}s, "
+        f"Save until file written {t3 - t2:.1f}s, closing {time.time() - t3:.1f}s")
+
+
+def signatures():
+    import sales_report as sr
+    main = [p for p in sr.MAIN.glob("*.xls*") if not p.name.startswith("~$")]
+    if len(main) != 1:
+        fail(f"Main must hold exactly one workbook to check the files against (found {len(main)}).")
+    return sr.main_signatures(main[0])
+
+
+def part_of(path, sig):
+    """(part sales_report.py sees in the file, its rows); (None, []) for a file it cannot read."""
+    import sales_report as sr
+    try:
+        header, rows = sr.read_raw(path)
+        return sr.classify(path, header, rows, sig), rows
+    except Exception:
+        return None, []
+
+
+def verify(path, parts, sig, log):
+    """The file must have rows and be one of the parts sales_report.py should see in it. Returns the part."""
+    got, rows = part_of(path, sig)
+    if not rows:
+        fail(f"{path.name} has no rows.")
+    if got not in parts:
+        fail(f"{path.name} looks like {got or 'nothing the report knows'}, expected "
+             + " or ".join(f"{k} {b}" for k, b in sorted(parts)) + ".")
+    log(f"  OK {path.name}: {len(rows)} rows, recognised as {got[0]} - {got[1]}")
+    return got
+
+
+# ---- run --------------------------------------------------------------------------------------------
+def run(log):
+    cred = json.loads(CREDENTIALS.read_text(encoding="utf-8")) if CREDENTIALS.exists() else fail(
+        f"{CREDENTIALS.name} is missing next to this script.")
+    INPUT.mkdir(exist_ok=True)
+    sig = signatures()
+    saved = []
+    for n, account in enumerate(ACCOUNTS):
+        c = cred.get(account) or {}
+        if not c.get("user") or not c.get("password"):
+            fail(f"{CREDENTIALS.name} has no user / password for {account}.")
+        login(account, c, log, ours=n > 0)
+        for acc, menu_path, code, name, parts, filters in REPORTS:
+            if acc != account:
+                continue
+            check()
+            log(f"{' > '.join(menu_path)}:")
+            open_report(menu_path, code)
+            for f in filters:
+                if f[0] == "checks":
+                    on, total = set_checks(code, f[1], f[2])  # read back after ticking
+                    log(f"  {f[1]}: (All) ticked, top and end of the list checked" if total == "all" else f"  {f[1]}: {len(on)} of {total} ticked" + (f" ({', '.join(on)})" if len(on) <= 4 else "")
+                        + (f" - not ticked: {', '.join(sorted(f[2][1]))}" if f[2] != "all" and f[2][0] == "except" else ""))
+                elif f[0] == "pick":
+                    pick(code, f[1], f[2])
+                    log(f"  {f[1]}: {f[2]}")
+                elif f[0] == "date":
+                    log(f"  {f[1]}: {set_date(code, f[1], f[2])}")
+                else:
+                    tick(code, f[1], f[0] == "tick")
+                    log(f"  {f[1]}: {f[0]}ed")
+            query(log)
+            path = INPUT / name
+            tmp = INPUT / f"~erp {name}"  # saved under a temporary name, put in place only once it checks out
+            export(code, tmp, log)
+            verify(tmp, parts, sig, log)
+            # what it replaces: the same name, or an older download of the same part under another name
+            from sales_report import recycle
+            old = [p for p in INPUT.iterdir() if p.suffix.lower() in (".xls", ".xlsx") and p != tmp and p not in saved
+                   and not p.name.startswith("~") and (p.stem.lower() == path.stem.lower() or part_of(p, sig)[0] in parts)]
+            if old:
+                recycle(old)
+                log(f"  old {', '.join(p.name for p in old)} -> Recycle Bin")
+            tmp.rename(path)
+            saved.append(path)
+            log(f"  saved {path}")
+
+
+def main():
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M")
+    lines = []
+
+    def log(msg):
+        print(msg, flush=True)
+        lines.append(msg)
+
+    try:  # real screen pixels for every window, so the STOP box lands where it is meant to
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except OSError:
+        pass
+    threading.Thread(target=_stop_window, daemon=True).start()
+    log(f"ERP export {stamp}  (STOP window or Esc stops it)")
+    ok = False
+    try:
+        run(log)
+        ok = True
+        log("")
+        log(f"Done: {len(REPORTS)} files in {INPUT}")
+    except Stopped as e:
+        log("")
+        log(f"STOPPED: {e}")
+    except Exception as e:  # anything unexpected stops too, with the reason
+        log("")
+        log(f"STOPPED (unexpected): {type(e).__name__}: {e}")
+    finally:
+        _stop.set()
+        for p in INPUT.glob("~erp *"):  # half-finished downloads never stay in Input
+            p.unlink(missing_ok=True)
+        (ROOT / "output").mkdir(exist_ok=True)
+        (ROOT / "output" / f"ERP export {stamp}.txt").write_text("\n".join(lines), encoding="utf-8-sig")
+    return ok
+
+
+if __name__ == "__main__":
+    sys.exit(0 if main() else 1)

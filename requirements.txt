@@ -1,3 +1,6 @@
 openpyxl==3.1.5
 xlrd==2.0.2
 pywin32==312
+pywinauto==0.6.9
+pillow==12.3.0
+comtypes==1.4.17

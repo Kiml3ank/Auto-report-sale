@@ -159,6 +159,10 @@ def read_raw(path):
         return [], []
     counts = [sum(map(is_text, grid[i])) for i in range(min(10, len(grid)))]
     hr = next(i for i, c in enumerate(counts) if c * 2 >= max(counts))
+    # an .xlsx export merges names such as NO. / Frame# down over two header rows: then the row picked is the lower
+    # one, and the row above holds the names it is missing
+    if hr > 0 and sum(1 for i, c in enumerate(grid[hr - 1]) if is_text(c) and not (i < len(grid[hr]) and is_text(grid[hr][i]))) >= 2:
+        hr -= 1
     top = [text(v) for v, _ in grid[hr]]
     nxt = grid[hr + 1] if hr + 1 < len(grid) else []
     below = [text(v) for v, _ in nxt]
