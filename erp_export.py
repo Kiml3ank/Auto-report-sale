@@ -130,6 +130,22 @@ def fail(msg):
     raise Stopped(msg)
 
 
+def front(w, tries=4):
+    """Brings a window to the front. Windows refuses that when another program has just popped up in front
+    (e.g. a WhatsApp message): then a zero-distance mouse move makes this script the last one with input,
+    which Windows accepts, and it tries again."""
+    for attempt in range(tries):
+        try:
+            w.set_focus()
+            return w
+        except Exception:
+            if attempt == tries - 1:
+                raise
+            print(f"  (Windows kept the ERP from the front - try {attempt + 2} of {tries})", flush=True)
+            ctypes.windll.user32.mouse_event(0x0001, 0, 0, 0, 0)  # MOUSEEVENTF_MOVE by 0, 0
+            wait(1)
+
+
 # ---- ERP helpers ------------------------------------------------------------------------------------
 def desk(backend="win32"):
     from pywinauto import Desktop
@@ -204,7 +220,7 @@ def login(account, cred, log, ours=False):
     else:
         fail("The ERP login window did not open within a minute.")
     wait(1)
-    lg.set_focus()
+    front(lg)
     lg.child_window(auto_id="id").set_edit_text(cred["user"])
     pwd = lg.child_window(auto_id="pwd")
     pwd.set_edit_text(cred["password"])
@@ -221,13 +237,13 @@ def login(account, cred, log, ours=False):
     else:
         fail(f"Login {account} did not finish within a minute (wrong password in credentials.json?).")
     wait(2)
-    main_window().set_focus()
+    front(main_window())
 
 
 def menu_bar():
     """The ERP window for UI automation, with its menu bar unfolded."""
     from pywinauto import mouse
-    main_window().set_focus()
+    front(main_window())
     wait(0.3)
     w = desk("uia").window(title_re=f".*{MAIN_TITLE}").wrapper_object()
     shown = lambda: any(c.parent().window_text() == "MenuStrip1" and c.rectangle().width() > 0
@@ -294,7 +310,7 @@ def set_checks(code, name, rule):
     else:
         how, names = rule
         want = (lambda n: n in names) if how == "only" else (lambda n: n not in names)
-    main_window().set_focus()  # the clicks below go to the screen: the ERP must be in front
+    front(main_window())  # the clicks below go to the screen: the ERP must be in front
     wait(0.2)
     click_at(field(code, name).rectangle())
     pop = None
@@ -434,7 +450,7 @@ def edit_box(code, name):
 
 def pick(code, name, value):
     """A drop-down with one choice (NEW / USED): opens it, clicks the item by name, reads the box back."""
-    main_window().set_focus()
+    front(main_window())
     wait(0.2)
     click_at(field(code, name).rectangle())
     wait(1)
@@ -559,7 +575,7 @@ def export(code, path, log=print):
             wait(0.5)
         else:
             if attempt == 0:
-                save.set_focus()
+                front(save)
                 name_box.set_focus()
                 name_box.type_keys("{ENTER}")
                 log("  (Save press did not register - pressed Enter)")
@@ -740,6 +756,8 @@ def main():
         ok = True
         log("")
         log(f"Done: {len(reports)} files in {INPUT}")
+        subprocess.run(["taskkill", "/IM", ERP_PROCESS, "/F"], capture_output=True)  # finished: close the ERP
+        log("KolaoERP closed.")
     except Stopped as e:
         log("")
         log(f"STOPPED: {e}")
