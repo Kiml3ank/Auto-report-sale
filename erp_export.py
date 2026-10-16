@@ -742,11 +742,25 @@ def main():
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except OSError:
         pass
-    # which downloads: the choice window, or all of them with --all (e.g. for a scheduled run)
-    reports = REPORTS if "--all" in sys.argv else choose_reports()
+    # which downloads: all of them with --all (e.g. for a scheduled run); --only DL,KLM and / or --types Sales,Stock
+    # (Diana's picker: groups as in the choice window, by their first word, and the first word of the file name);
+    # otherwise the choice window
+    def listed(name):
+        return sys.argv[sys.argv.index(name) + 1].split(",") if name in sys.argv[:-1] else None
+    who, what = listed("--only"), listed("--types")
+    if "--all" in sys.argv:
+        reports = REPORTS
+    elif who or what:
+        reports = [r for r in REPORTS if (not who or group_of(r).split()[0] in who)
+                   and (not what or r[3].split()[0] in what)]
+        if not reports:
+            print(f"Nothing matches --only {who} --types {what} - nothing downloaded.")
+            return None
+    else:
+        reports = choose_reports()
     if reports is None:
         print("ERP export cancelled - nothing downloaded.")
-        return False
+        return None
     threading.Thread(target=_stop_window, daemon=True).start()
     log(f"ERP export {stamp}  (STOP window or Esc stops it)")
     log("Chosen: " + ("all" if len(reports) == len(REPORTS) else ", ".join(r[3].rsplit(".", 1)[0] for r in reports)))
@@ -774,4 +788,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(0 if main() else 1)
+    done = main()
+    sys.exit(0 if done else 2 if done is None else 1)   # 2: cancelled, nothing downloaded (not a failure)
