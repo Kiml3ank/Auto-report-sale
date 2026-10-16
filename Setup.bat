@@ -53,6 +53,7 @@ echo.
 echo [5/5] Folders
 for %%D in (Input adjust Main output) do if not exist "%~dp0%%D" mkdir "%~dp0%%D"
 echo       Input, adjust, Main, output are ready.
+if exist "D:\Diana\Setup.bat" echo       For Diana on the desktop, run D:\Diana\Setup.bat as well.
 
 echo.
 echo ============================================

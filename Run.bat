@@ -8,9 +8,14 @@ if not exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
   pause
   exit /b 1
 )
-rem Diana runs the job and shows her animation in the bottom-right corner:
 rem 1) erp_export.py downloads today's files from KolaoERP into Input (STOP window or Esc stops it)
 rem 2) sales_report.py builds the report from Input - only when the download worked
-"%LOCALAPPDATA%\Programs\Python\Python313\python.exe" -X utf8 "%~dp0diana.py"
+rem With Diana installed (D:\Diana, her own add-on), she opens and runs them when you click her.
+set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+if exist "D:\Diana\diana.py" (
+  "%PY%" -X utf8 "D:\Diana\diana.py"
+) else (
+  "%PY%" -X utf8 "%~dp0erp_export.py" && "%PY%" -X utf8 "%~dp0sales_report.py"
+)
 echo.
 pause

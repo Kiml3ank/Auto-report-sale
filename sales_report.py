@@ -645,15 +645,19 @@ def add_rows(xl, wb, sheets, header, fixed, drop, log):
         ws, hr, last, count, m, mcol = state[name]
         width = len(m)
         new = [r for r in rows if text(r[col[KEY]][0]) not in existing]
-        for row in rows:  # rows already there are left alone, differences are only reported
-            frame = text(row[col[KEY]][0])
+        for row in rows:  # rows already there are left alone, differences are only reported - except the Status,
+            frame = text(row[col[KEY]][0])  # which moves on in the ERP (Wait Sales Approval -> Confirm) and follows the export
             for sheet, r in existing.get(frame, [])[:1]:
                 if sheet != name:
                     log(f"WARNING {frame} belongs in {name} but is already in {sheet} row {r} - not added again")
                     continue
                 old = ws.Range(ws.Cells(r, 1), ws.Cells(r, width)).Value2[0]
+                if "Status" in mcol and "Status" in col and text(row[col["Status"]][0]) \
+                        and text(old[mcol["Status"]]) != text(row[col["Status"]][0]):
+                    ws.Cells(r, mcol["Status"] + 1).Value2 = text(row[col["Status"]][0])
+                    log(f"UPDATED {name} row {r} {frame}: Status '{text(old[mcol['Status']])}' -> '{text(row[col['Status']][0])}'")
                 d = [f"{c}: main '{text(old[mcol[c]])}' / export '{text(row[col[c]][0])}'" for c in QC_COLS
-                     if c in mcol and c in col and text(old[mcol[c]]) != text(row[col[c]][0])]
+                     if c != "Status" and c in mcol and c in col and text(old[mcol[c]]) != text(row[col[c]][0])]
                 if d:
                     log(f"DIFFERENT (not changed) {name} row {r} {frame}: " + "; ".join(d))
         if new:
@@ -1106,6 +1110,7 @@ TH = [(re.compile(p), r) for p, r in [
      r"ALERT มีรถ \1 คันในไฟล์หลักที่ไม่อยู่ใน export ของวันนี้ (อาจขาดไฟล์ดาวน์โหลด): \2; เช่น "),
     (r"^WARNING (\S+) belongs in (.+) but is already in (.+) row (\d+) - not added again$",
      r"WARNING \1 ควรอยู่ใน \2 แต่มีอยู่แล้วใน \3 แถว \4 - ไม่เพิ่มซ้ำ"),
+    (r"^UPDATED (.+) row (\d+) (\S+): Status (.*)$", r"UPDATED (แก้แล้ว) \1 แถว \2 \3: Status \4"),
     (r"^DIFFERENT \(not changed\) (.*)$", lambda m: "DIFFERENT (ไม่ได้แก้) " + m.group(1).replace(": main '", ": ไฟล์หลัก '")),
     (r"^(.+): (\d+) rows before, (\d+) added, (\d+) already there, (\d+) now$",
      r"\1: เดิม \2 แถว, เพิ่ม \3, มีอยู่แล้ว \4, ตอนนี้ \5"),
@@ -1136,6 +1141,8 @@ TH = [(re.compile(p), r) for p, r in [
     (r"^Input: files kept\.$", "Input: เก็บไฟล์ไว้"),
     (r"^Input: (\d+) file\(s\) sent to the Recycle Bin: ", r"Input: ส่ง \1 ไฟล์ไป Recycle Bin: "),
     (r"^Input: the files could NOT be deleted \(one may be open in Excel\)\.$", "Input: ลบไฟล์ไม่ได้ (อาจมีไฟล์เปิดอยู่ใน Excel)"),
+    (r"^adjust: (\d+) file\(s\) sent to the Recycle Bin$", r"adjust: ส่ง \1 ไฟล์ไป Recycle Bin"),
+    (r"^adjust: the files could NOT be deleted \(one may be open in Excel\)\.$", "adjust: ลบไฟล์ไม่ได้ (อาจมีไฟล์เปิดอยู่ใน Excel)"),
     # words left over inside the lines above
     (r"\((\d+) rows\)", r"(\1 แถว)"),
     (r" row (\d+)\b", r" แถว \1"),
@@ -1150,7 +1157,21 @@ def thai(line):
 
 
 def ask(question, buttons=4):
-    """A Windows message box on top of other windows. buttons: 4 = Yes/No (No is the default), 5 = Retry/Cancel."""
+    """Asks Yes/No: in Diana's chat bubble when diana.py started this run (she sets DIANA_PORT), otherwise in a
+    Windows message box on top of other windows. buttons: 4 = Yes/No (No is the default), 5 = Retry/Cancel."""
+    port = os.environ.get("DIANA_PORT")
+    if port:
+        import json
+        import socket
+        try:
+            with socket.create_connection(("127.0.0.1", int(port)), timeout=3) as s:
+                s.settimeout(None)  # the question can wait as long as it takes
+                s.sendall((json.dumps({"q": question, "buttons": buttons}) + "\n").encode("utf-8"))
+                answer = s.makefile(encoding="utf-8").readline().strip()
+            if answer in ("yes", "no"):
+                return answer == "yes"
+        except OSError:
+            pass  # Diana is gone: ask with the message box instead
     import ctypes
     flags = buttons | 0x20 | 0x40000 | 0x10000 | (0x100 if buttons == 4 else 0)
     return ctypes.windll.user32.MessageBoxW(0, question, "Daily sales report", flags) in (6, 4)  # Yes or Retry
@@ -1231,6 +1252,17 @@ def clear_input(files, log, choice):
         log(f"Input: {len(files)} file(s) sent to the Recycle Bin: " + ", ".join(f.name for f in files))
     else:
         log("Input: the files could NOT be deleted (one may be open in Excel).")
+
+
+def clear_adjust(log):
+    """The adjusted files are only a step on the way: once the report is built, adjust is emptied."""
+    files = [p for p in ADJUST.iterdir() if p.is_file()]
+    if not files:
+        return
+    if recycle(files):
+        log(f"adjust: {len(files)} file(s) sent to the Recycle Bin")
+    else:
+        log("adjust: the files could NOT be deleted (one may be open in Excel).")
 
 
 def main():
@@ -1393,6 +1425,7 @@ def main():
         log("")
         log(f"Output for QC: {out_path}")
         whatsapp_folders(out_path, stamp, log)
+        clear_adjust(log)
         replace_main(mains[0], out_path, stamp, log, choice)
         clear_input(list(dict.fromkeys(f for files in got.values() for f, _, _ in files)), log, clear)  # files it did not recognise stay
     except Exception as e:
