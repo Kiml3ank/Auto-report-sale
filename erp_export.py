@@ -152,13 +152,26 @@ def desk(backend="win32"):
     return Desktop(backend=backend)
 
 
-def main_window(patience=10):
-    """The ERP main window; while it redraws (a form opening) it can be missing for a moment, so look again for a while."""
-    end = time.time() + patience
+def title(handle):
+    """A window's title as Windows keeps it: unlike pywinauto's window_text() this does not ask the window, so it
+    still reads while the ERP is busy (Not Responding) instead of coming back empty."""
+    buf = ctypes.create_unicode_buffer(512)
+    ctypes.windll.user32.GetWindowTextW(handle, buf, 512)
+    return buf.value
+
+
+def main_window(patience=10, busy_patience=180):
+    """The ERP main window; while it redraws (a form opening) it can be missing for a moment, so look again for a while.
+    A heavy report (e.g. [KLM]Sale details) can freeze the ERP for many seconds while it opens: then wait for it
+    to answer again, and while the ERP program still runs give it longer before calling it closed."""
+    start = time.time()
     while True:
-        ws = [w for w in desk().windows() if w.window_text().endswith(MAIN_TITLE) and w.class_name().startswith("WindowsForms10")]
-        if ws or time.time() > end:
-            return ws[0] if ws else None
+        ws = [w for w in desk().windows() if title(w.handle).endswith(MAIN_TITLE) and w.class_name().startswith("WindowsForms10")]
+        waited = time.time() - start
+        if ws and not ctypes.windll.user32.IsHungAppWindow(ws[0].handle):
+            return ws[0]
+        if waited > busy_patience or (not ws and waited > patience and not erp_running()):
+            return None
         check()
         time.sleep(0.5)
 
@@ -186,7 +199,7 @@ def click_at(rect, dx=None):
 
 
 def form(code):
-    w = main_window() or fail("The ERP window closed.")
+    w = main_window() or fail("The ERP window closed." if not erp_running() else "The ERP stopped answering for 3 minutes.")
     fs = [c for c in w.descendants() if c.element_info.automation_id == code]
     return fs[0] if fs else None
 
@@ -231,7 +244,7 @@ def login(account, cred, log, ours=False):
         if message_boxes():
             box = message_boxes()[0]
             fail(f"Login {account} refused: {box.window_text()} {' '.join(c.window_text() for c in box.children())}")
-        if main_window(patience=0) and not lg.exists():
+        if main_window(patience=0, busy_patience=0) and not lg.exists():
             break
         time.sleep(0.5)
     else:
@@ -507,17 +520,20 @@ def query(log):
     btn = desk("uia").window(title_re=f".*{MAIN_TITLE}").child_window(title="Query(Q)", control_type="Button", found_index=0)
     btn.click_input()
     start = time.time()
-    wait(2)
-    calm = 0
-    while calm < 3:  # answering for 3 s in a row = done
+    wait(1)
+    calm_since = None
+    while calm_since is None or time.time() - calm_since < 1.5:  # answering for 1.5 s in a row = done
         check()
         if message_boxes():
             box = message_boxes()[0]
             fail(f"The ERP showed a message after Query: {box.window_text()} {' '.join(c.window_text() for c in box.children())}")
         if time.time() - start > QUERY_TIMEOUT:
             fail(f"Query took longer than {QUERY_TIMEOUT // 60} minutes.")
-        calm = calm + 1 if responsive(w) else 0
-        wait(1)
+        if not responsive(w):
+            calm_since = None
+        elif calm_since is None:
+            calm_since = time.time()
+        wait(0.25)
     log(f"  Query done in {time.time() - start:.0f} s")
 
 
@@ -567,12 +583,14 @@ def export(code, path, log=print):
     name_box = save.child_window(class_name="Edit", found_index=0)
     name_box.set_edit_text(str(path))
     wait(0.3)
-    save.child_window(title_re="&Save|Save", class_name="Button").click()  # pressed as a control: nothing on top can block it
-    for attempt in range(2):  # the press does not always register: then Enter in the file name box
-        for _ in range(4):  # a press that works closes the window well within 2 s
+    # Save given to the save window as its OK command: unlike a click on the button (BM_CLICK, often ignored while
+    # the window is not the active one) it needs no focus, and nothing on top can block it
+    ctypes.windll.user32.PostMessageW(save.handle, 0x0111, 1, 0)  # WM_COMMAND, IDOK
+    for attempt in range(2):  # should it still not register: Enter in the file name box
+        for _ in range(10):  # a press that works closes the window well within 2 s
             if not save.exists():
                 break
-            wait(0.5)
+            wait(0.2)
         else:
             if attempt == 0:
                 front(save)

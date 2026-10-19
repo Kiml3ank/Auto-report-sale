@@ -914,6 +914,12 @@ def show_report_days(wb, day, log):
         if this_week is None:
             log(f"CHECK {name}: no day column for the report day - day columns left as they were")
             continue
+        # a new week is opened first: its WeekN column, and those of the weeks before it, shown (as on KOLAOTOPIA);
+        # weeks still to come are left as they are
+        for w in sorted({w for _, _, w in days}):
+            if w <= this_week and ws.Columns(w).Hidden:
+                ws.Columns(w).Hidden = False
+                log(f"Week opened on {name}: {heads[w - 3]}")
         shown = []
         for c, d, w in days:
             show = w == this_week and d <= day
