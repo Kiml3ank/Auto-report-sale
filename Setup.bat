@@ -12,7 +12,7 @@ echo   Setup for the daily sales report
 echo ============================================
 echo.
 
-echo [1/5] Python
+echo [1/6] Python
 if exist "%PY%" goto have_python
 echo       not found - downloading Python %PYVER%, about 30 MB ...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing 'https://www.python.org/ftp/python/%PYVER%/python-%PYVER%-amd64.exe' -OutFile '%INSTALLER%'"
@@ -29,17 +29,17 @@ echo       already installed.
 
 :libraries
 echo.
-echo [2/5] Libraries (openpyxl, xlrd, pywin32)
+echo [2/6] Libraries (openpyxl, xlrd, pywin32)
 "%PY%" -m pip install --disable-pip-version-check --no-warn-script-location -r "%~dp0requirements.txt"
 if errorlevel 1 goto fail_libraries
 
 echo.
-echo [3/5] Check that the libraries load
+echo [3/6] Check that the libraries load
 "%PY%" -c "import openpyxl, xlrd, pythoncom, win32com.client; print('      OK')"
 if errorlevel 1 goto fail_libraries
 
 echo.
-echo [4/5] Microsoft Excel
+echo [4/6] Microsoft Excel
 reg query "HKCR\Excel.Application" >nul 2>&1
 if errorlevel 1 goto no_excel
 echo       found.
@@ -50,10 +50,14 @@ set "WARN=1"
 
 :folders
 echo.
-echo [5/5] Folders
+echo [5/6] Folders
 for %%D in (Input adjust Main output) do if not exist "%~dp0%%D" mkdir "%~dp0%%D"
 echo       Input, adjust, Main, output are ready.
 if exist "D:\Diana\Setup.bat" echo       For Diana on the desktop, run D:\Diana\Setup.bat as well.
+
+echo.
+echo [6/6] ERP logins (for the download from KolaoERP)
+"%PY%" -X utf8 "%~dp0erp_export.py" --logins
 
 echo.
 echo ============================================

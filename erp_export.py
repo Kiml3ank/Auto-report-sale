@@ -248,7 +248,7 @@ def login(account, cred, log, ours=False):
             break
         time.sleep(0.5)
     else:
-        fail(f"Login {account} did not finish within a minute (wrong password in credentials.json?).")
+        fail(f"Login {account} did not finish within a minute (wrong password? run Setup.bat to enter it again).")
     wait(2)
     front(main_window())
 
@@ -700,7 +700,7 @@ def choose_reports():
 # ---- run --------------------------------------------------------------------------------------------
 def run(log, reports=REPORTS):
     cred = json.loads(CREDENTIALS.read_text(encoding="utf-8")) if CREDENTIALS.exists() else fail(
-        f"{CREDENTIALS.name} is missing next to this script.")
+        f"{CREDENTIALS.name} is missing: run Setup.bat to enter the ERP logins.")
     INPUT.mkdir(exist_ok=True)
     sig = signatures()
     saved, logged_in = [], False
@@ -709,7 +709,7 @@ def run(log, reports=REPORTS):
             continue
         c = cred.get(account) or {}
         if not c.get("user") or not c.get("password"):
-            fail(f"{CREDENTIALS.name} has no user / password for {account}.")
+            fail(f"No ERP login for {LOGINS.get(account, account)} on this PC: run Setup.bat to enter it.")
         login(account, c, log, ours=logged_in)
         logged_in = True
         for acc, menu_path, code, name, parts, filters in reports:
@@ -805,6 +805,47 @@ def main():
     return ok
 
 
+LOGINS = {"DL": "the dealers' data (DL)",
+          "KDC": "car sales, stock and order data (KDC / KDCX, KLM, LXC)"}
+
+
+def ask_logins():
+    """Setup.bat: asks for the ERP logins of this PC's user and keeps them in credentials.json (only on this PC)."""
+    from getpass import getpass
+    cred = json.loads(CREDENTIALS.read_text(encoding="utf-8")) if CREDENTIALS.exists() else {}
+    if all((cred.get(a) or {}).get("user") and (cred.get(a) or {}).get("password") for a in LOGINS):
+        print("      ERP logins already saved on this PC:")
+        for a, what in LOGINS.items():
+            print(f"        {cred[a]['user']}  for {what}")
+        if input("      Keep them? (Y = keep, N = enter new ones): ").strip().lower() != "n":
+            print("      kept.")
+            return
+    print("      The ERP download logs in to KolaoERP with your own ERP accounts.")
+    print("      They are saved on this PC only (credentials.json) and never uploaded. Passwords do not show while typed.")
+    print("      Leave a user ID empty to skip it (run Setup.bat again later to enter it).")
+    for a, what in LOGINS.items():
+        print()
+        user = input(f"      ERP user ID for {what}: ").strip()
+        if not user:
+            old = (cred.get(a) or {}).get("user")
+            print(f"      kept {old}." if old else "      skipped.")
+            continue
+        while True:
+            password = getpass("      password: ")
+            if password and password == getpass("      password again: "):
+                break
+            print("      the two passwords are not the same (or empty) - again please.")
+        cred[a] = {"user": user, "password": password}
+    cred["_note"] = "KolaoERP logins for erp_export.py. Stays on this PC (in .gitignore) - never upload it."
+    CREDENTIALS.write_text(json.dumps(cred, indent=2, ensure_ascii=False), encoding="utf-8")
+    missing = [what for a, what in LOGINS.items() if not (cred.get(a) or {}).get("user")]
+    print()
+    print("      saved." + (f" Not entered: {', '.join(missing)} - the ERP download cannot fetch that data yet." if missing else ""))
+
+
 if __name__ == "__main__":
+    if "--logins" in sys.argv:
+        ask_logins()
+        sys.exit(0)
     done = main()
     sys.exit(0 if done else 2 if done is None else 1)   # 2: cancelled, nothing downloaded (not a failure)
