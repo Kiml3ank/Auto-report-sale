@@ -380,37 +380,18 @@ def set_checks(code, name, rule):
     def visible():
         return {n: c.get_toggle_state() for n, c in boxes().items() if n and n != "(All)"}
 
-    def bottom():
-        """To the end of the list: the scroll bar's handle (at the top of its bar after top()) is dragged down in one
-        go - fast even for the hundreds of showrooms of KDC Order Status; the wheel then makes sure nothing follows."""
-        x = area.right - 9
-        mouse.press(coords=(x, area.top + 26))
-        time.sleep(0.2)
-        for y in range(area.top + 40, area.bottom + 40, 60):
-            mouse.move(coords=(x, y))
-            time.sleep(0.03)
-        mouse.release(coords=(x, area.bottom + 40))
-        wait(0.6)
-        for _ in range(400):  # some lists hold hundreds of showrooms
-            last = list(visible())[-1:]
-            scroll(-60)
-            if list(visible())[-1:] == last:
-                return
-        fail(f"Could not scroll to the end of the list '{name}'.")
-
     state = None
     if rule == "all" or rule[0] == "except":
-        # Showroom / Dealer / Car Type: (All) first. Checked at the top and at the end of the list: the end is where
-        # items were missed before, when only the items in view were ticked
+        # Showroom / Dealer / Car Type: (All) first. (All) ticks the whole list, so only the items in view are checked:
+        # no scrolling to the end
         for _ in range(2):  # (All) ticks the list, or clears it when it was all ticked already: then once more
             top()
             boxes()["(All)"].click_input()
             wait(0.4)
             if all(v == 1 for v in visible().values()):
                 break
-        bottom()
-        if not all(v == 1 for v in visible().values()):
-            fail(f"'(All)' did not tick the whole list '{name}' (the end of the list is not ticked).")
+        else:
+            fail(f"'(All)' did not tick the list '{name}'.")
 
     def act(n, c):
         if c.get_toggle_state() != int(want(n)):
@@ -716,12 +697,13 @@ def run(log, reports=REPORTS):
             if acc != account:
                 continue
             check()
+            t_report = time.time()
             log(f"{' > '.join(menu_path)}:")
             open_report(menu_path, code)
             for f in filters:
                 if f[0] == "checks":
                     on, total = set_checks(code, f[1], f[2])  # read back after ticking
-                    log(f"  {f[1]}: (All) ticked, top and end of the list checked" if total == "all" else f"  {f[1]}: {len(on)} of {total} ticked" + (f" ({', '.join(on)})" if len(on) <= 4 else "")
+                    log(f"  {f[1]}: (All) ticked" if total == "all" else f"  {f[1]}: {len(on)} of {total} ticked" + (f" ({', '.join(on)})" if len(on) <= 4 else "")
                         + (f" - not ticked: {', '.join(sorted(f[2][1]))}" if f[2] != "all" and f[2][0] == "except" else ""))
                 elif f[0] == "pick":
                     pick(code, f[1], f[2])
@@ -746,6 +728,15 @@ def run(log, reports=REPORTS):
             tmp.rename(path)
             saved.append(path)
             log(f"  saved {path}")
+            # closed once saved: left open, every report adds its grid to the ERP window that each later step
+            # searches through, and the run got slower with each one
+            try:
+                close_report(code)
+            except Stopped:
+                if _stop.is_set():
+                    raise
+                log("  (could not close the report - carrying on with it open)")
+            log(f"  {time.time() - t_report:.0f} s for this report")
 
 
 def main():
