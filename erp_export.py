@@ -87,7 +87,7 @@ _stop = threading.Event()
 _stop_reason = ["pressed STOP"]
 
 
-def _stop_window():
+def _stop_window(what="ERP download"):
     import tkinter as tk
     root = tk.Tk()
     root.overrideredirect(True)  # no title bar: a small box
@@ -98,7 +98,7 @@ def _stop_window():
     box.pack(fill="both", expand=True)
     tk.Button(box, text="STOP  (Esc)", font=("Segoe UI", 13, "bold"), bg="#c62828", fg="white", activebackground="#8e0000",
               bd=0, command=_stop.set).pack(fill="x", padx=4, pady=(4, 0))
-    tk.Label(box, text="ERP download running - don't touch mouse / keyboard", font=("Segoe UI", 8), bg="#c62828",
+    tk.Label(box, text=f"{what} running - don't touch mouse / keyboard", font=("Segoe UI", 8), bg="#c62828",
              fg="white").pack(padx=4, pady=(0, 4))
 
     def poll():
@@ -198,16 +198,66 @@ def click_at(rect, dx=None):
     mouse.click(coords=(x, (rect.top + rect.bottom) // 2))
 
 
+# a report's form and fields, found once while it is open: each search asks every control of the ERP window (the
+# grid's too) for its name, which made every filter step slow. A window that is gone (report closed) is looked up again.
+_found = {}
+
+
+def _alive(c):
+    return c is not None and ctypes.windll.user32.IsWindow(c.handle) and ctypes.windll.user32.IsWindowVisible(c.handle)
+
+
+def _find(parent, name):
+    """The control of that name under parent, looked for level by level: a form sits near the top, so the deep insides
+    of the grids are not searched. A control that closes while it is looked at (the report closed just before) is
+    skipped; it raised 'Invalid window handle' and stopped the run."""
+    level = [parent]
+    while level:
+        below = []
+        for c in level:
+            try:
+                kids = c.children()
+            except Exception:
+                continue
+            for k in kids:
+                try:
+                    if k.element_info.automation_id == name:
+                        return k
+                except Exception:
+                    continue
+                below.append(k)
+        level = below
+    return None
+
+
 def form(code):
     w = main_window() or fail("The ERP window closed." if not erp_running() else "The ERP stopped answering for 3 minutes.")
-    fs = [c for c in w.descendants() if c.element_info.automation_id == code]
-    return fs[0] if fs else None
+    if _alive(_found.get(code)):
+        return _found[code]
+    f = _find(w, code)
+    if f is not None:
+        _found[code] = f
+    return f
 
 
-def field(code, name):
-    f = form(code) or fail(f"Form {code} is not open.")
-    fs = [c for c in f.descendants() if c.element_info.automation_id == name]
-    return fs[0] if fs else fail(f"Form {code} has no field '{name}' - the ERP screen changed.")
+def field(code, name, patience=3):
+    """patience: seconds a field of a form that has just opened may take to appear."""
+    if _alive(_found.get((code, name))):
+        form(code)  # still checks that the ERP is there and answering
+        return _found[(code, name)]
+    end = time.time() + patience
+    while True:
+        f = form(code) or fail(f"Form {code} is not open.")
+        try:
+            fs = [c for c in f.descendants() if c.element_info.automation_id == name]
+        except Exception:  # a control closed while it was looked at: look again
+            fs = []
+        if fs:
+            _found[(code, name)] = fs[0]
+            return fs[0]
+        if time.time() > end:
+            fail(f"Form {code} has no field '{name}' - the ERP screen changed.")
+        wait(0.3)
 
 
 def login(account, cred, log, ours=False):
@@ -279,36 +329,48 @@ def menu(*names):
     from pywinauto import mouse
     w = menu_bar()
     level = [c for c in w.descendants(control_type="MenuItem") if c.parent().window_text() == "MenuStrip1"]
-    for name in names:
+    for k, name in enumerate(names):
         check()
         it = [c for c in level if c.window_text() == name]
         if not it:
             fail(f"Menu item '{name}' not found - the ERP menu changed.")
         r = it[0].rectangle()
         mouse.click(coords=((r.left + r.right) // 2, (r.top + r.bottom) // 2))
-        wait(0.8)
-        level = it[0].children(control_type="MenuItem")
+        if k == len(names) - 1:  # the last one opens the report: open_report / close_report wait for that
+            wait(0.3)
+            break
+        # until the sub-menu is open with the next name in it (was a fixed 0.8 s per click)
+        for _ in range(20):
+            wait(0.1)
+            level = it[0].children(control_type="MenuItem")
+            if any(c.window_text() == names[k + 1] and c.rectangle().width() > 0 for c in level):
+                wait(0.1)  # let it finish drawing
+                break
 
 
 def open_report(path, code):
-    """Opens the report at that menu path and waits for its form."""
+    """Opens the report at that menu path and waits for its form. Returns the seconds the menu clicks took."""
+    t = time.time()
     menu(*path)
+    clicks = time.time() - t
     for _ in range(60):
         check()
         if form(code):
-            wait(1.5)
-            return
+            wait(0.5)  # field() waits for any field still being drawn (this was a fixed 1.5 s)
+            return clicks
         time.sleep(0.5)
     fail(f"'{' -> '.join(path)}' did not open.")
 
 
 def close_report(code):
     """File -> Close closes the report in front (the one just exported), so the next one starts fresh."""
+    f = form(code)
     menu("File", "Close")
-    for _ in range(20):
-        if not form(code):
+    for _ in range(40):  # its window gone = closed (looking for it in the whole ERP window took seconds each time)
+        if not _alive(f):
+            _found.clear()
             return
-        wait(0.5)
+        wait(0.25)
     fail("The report did not close.")
 
 
@@ -425,7 +487,7 @@ def ticked(ctrl, box_left=False):
     r = ctrl.rectangle()
     x = r.left if box_left else r.right - 22
     box = ImageGrab.grab((x, r.top, x + 22, r.bottom)).convert("L")
-    return sum(1 for p in box.getdata() if p < 90) >= 6
+    return sum(1 for p in box.tobytes() if p < 90) >= 6  # grey ("L"): one byte per pixel
 
 
 def tick(code, name, on=True):
@@ -699,24 +761,28 @@ def run(log, reports=REPORTS):
             check()
             t_report = time.time()
             log(f"{' > '.join(menu_path)}:")
-            open_report(menu_path, code)
+            clicks = open_report(menu_path, code)
+            log(f"  opened in {time.time() - t_report:.1f} s (menu clicks {clicks:.1f} s)")
             for f in filters:
+                t_step = time.time()
                 if f[0] == "checks":
                     on, total = set_checks(code, f[1], f[2])  # read back after ticking
-                    log(f"  {f[1]}: (All) ticked" if total == "all" else f"  {f[1]}: {len(on)} of {total} ticked" + (f" ({', '.join(on)})" if len(on) <= 4 else "")
-                        + (f" - not ticked: {', '.join(sorted(f[2][1]))}" if f[2] != "all" and f[2][0] == "except" else ""))
+                    said = (f"  {f[1]}: (All) ticked" if total == "all" else f"  {f[1]}: {len(on)} of {total} ticked" + (f" ({', '.join(on)})" if len(on) <= 4 else "")
+                            + (f" - not ticked: {', '.join(sorted(f[2][1]))}" if f[2] != "all" and f[2][0] == "except" else ""))
                 elif f[0] == "pick":
                     pick(code, f[1], f[2])
-                    log(f"  {f[1]}: {f[2]}")
+                    said = f"  {f[1]}: {f[2]}"
                 elif f[0] == "date":
-                    log(f"  {f[1]}: {set_date(code, f[1], f[2])}")
+                    said = f"  {f[1]}: {set_date(code, f[1], f[2])}"
                 else:
                     tick(code, f[1], f[0] == "tick")
-                    log(f"  {f[1]}: {f[0]}ed")
+                    said = f"  {f[1]}: {f[0]}ed"
+                log(f"{said}  ({time.time() - t_step:.1f} s)")
             query(log)
             path = INPUT / name
             tmp = INPUT / f"~erp {name}"  # saved under a temporary name, put in place only once it checks out
             export(code, tmp, log)
+            t_step = time.time()
             verify(tmp, parts, sig, log)
             # what it replaces: the same name, or an older download of the same part under another name
             from sales_report import recycle
@@ -727,7 +793,8 @@ def run(log, reports=REPORTS):
                 log(f"  old {', '.join(p.name for p in old)} -> Recycle Bin")
             tmp.rename(path)
             saved.append(path)
-            log(f"  saved {path}")
+            log(f"  saved {path}  (check and replace {time.time() - t_step:.1f} s)")
+            t_step = time.time()
             # closed once saved: left open, every report adds its grid to the ERP window that each later step
             # searches through, and the run got slower with each one
             try:
@@ -736,6 +803,7 @@ def run(log, reports=REPORTS):
                 if _stop.is_set():
                     raise
                 log("  (could not close the report - carrying on with it open)")
+            log(f"  closed in {time.time() - t_step:.1f} s")
             log(f"  {time.time() - t_report:.0f} s for this report")
 
 
