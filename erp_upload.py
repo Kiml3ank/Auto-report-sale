@@ -254,7 +254,7 @@ def drag(pdf):
             fail(f"{pdf.name} is not in the Explorer window.")
         r = items[0].rectangle()
         sx, sy = r.left + 40, (r.top + r.bottom) // 2
-        tx, ty = (grid.left + grid.right) // 2, (grid.top + grid.bottom) // 2
+        tx, ty = grid.left + 150, grid.top + 150  # just inside the list, below its headers: enough for the drop
         mouse.press(coords=(sx, sy))
         wait(0.3)
         for k in range(1, 31):  # in small steps: Windows starts a drag only once the mouse moves with the button down
