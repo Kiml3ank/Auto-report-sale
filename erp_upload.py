@@ -70,6 +70,16 @@ def uia(handle):
     return desk("uia").window(handle=handle).wrapper_object()
 
 
+def show_erp():
+    """The ERP in front and not minimized: the drag and the clicks go to the screen."""
+    w = main_window() or fail("The ERP window closed." if not erp.erp_running() else "The ERP stopped answering.")
+    if ctypes.windll.user32.IsIconic(w.handle):
+        ctypes.windll.user32.ShowWindow(w.handle, 9)  # SW_RESTORE
+        wait(1)
+    front(w)
+    wait(0.2)
+
+
 def centre(ctrl):
     r = ctrl.rectangle()
     return (r.left + r.right) // 2, (r.top + r.bottom) // 2
@@ -130,45 +140,16 @@ def open_form():
     fail(f"{FORM_NAME} did not open.")
 
 
-def shown(ctrl):
-    """The text a DevExpress box shows (its own value, or its text box's)."""
-    for c in [uia(ctrl.handle)] + uia(ctrl.handle).descendants():
-        for v in (c.legacy_properties().get("Value"), c.window_text()):
-            if v and v.strip():
-                return v.strip()
-    return ""
-
-
-def set_srm():
-    box = [c for c in field(FORM, "f_show_code").children() if c.element_info.automation_id == "ComboBoxEdit1"]
-    box = box[0] if box else fail("SRM has no list - the ERP screen changed.")
-    if shown(box) == SRM:
-        return
-    front(main_window())
-    erp.click_at(box.rectangle())
-    wait(1)
-    ps = erp.popups()
-    items = [c for c in uia(ps[0].handle).descendants(control_type="ListItem")
-             if c.window_text().split()[:1] == [SRM]] if ps else []
-    if not items:
-        fail(f"The SRM list has no '{SRM}'.")
-    items[0].click_input()
-    wait(0.8)
-    if shown(box) != SRM:
-        fail(f"SRM shows '{shown(box)}', not {SRM}.")
-
-
 def open_documents():
-    """The Sale Document tab, where the PDFs go."""
-    page = field(FORM, "XtraTabPage3")
-    if page.is_visible() and page.rectangle().width() > 100:
-        return
+    """The Sale Document tab, where the PDFs go. Its page is made only once the tab is first opened: the tab first."""
     tabs = [c for c in uia(field(FORM, "XtraTabControl1").handle).descendants(control_type="TabItem")
             if c.window_text() == "Sale Document"]
     if not tabs:
         fail("The Sale Document tab was not found - the ERP screen changed.")
+    show_erp()
     tabs[0].click_input()
     wait(1)
+    page = field(FORM, "XtraTabPage3", patience=5)
     if not (page.is_visible() and page.rectangle().width() > 100):
         fail("The Sale Document tab did not open.")
 
@@ -225,7 +206,7 @@ def query(frame_no):
     """Frame# -> Query. Returns the bookings found, or None when the list did not change (a Query that did not run)."""
     before = bookings()
     box = erp.edit_box(FORM, "f_frame_no")
-    front(main_window())
+    show_erp()
     box.click_input()
     wait(0.2)
     box.type_keys("^a{BACKSPACE}" + frame_no)
@@ -292,7 +273,7 @@ def upload(pdf, log):
     """One permit. Returns 'OK', 'ALREADY' or 'SKIP'; anything else stops the run (Stopped)."""
     from pywinauto import mouse
     no = pdf.stem
-    front(main_window())
+    show_erp()
     no_box("before the next permit")
     found = query(no)
     if found is None:
@@ -312,7 +293,7 @@ def upload(pdf, log):
     if len(now) != len(have) + 1 or now.count(pdf.name) != 1:
         fail(f"{no}: after the drop {book} lists {now}, not one new {pdf.name} - not saved.")
     k = [i for i, r in sorted(rows().items()) if r["File Name"].legacy_properties().get("Value") == pdf.name][0]
-    front(main_window())
+    show_erp()
     wait(0.3)
     for _ in range(2):  # a click ticks it; the first may only select the cell: looked at on screen after each
         if ticked(rows()[k]["MN Chk"]):
@@ -344,7 +325,7 @@ def run(folders, log):
         fail(f"No ERP login for {erp.LOGINS[ACCOUNT]} on this PC: run Setup.bat to enter it.")
     erp.login(ACCOUNT, c, log)
     open_form()
-    set_srm()
+    erp.set_checks(FORM, "f_show_code", ("only", {SRM}))  # SRM: a tick list (empty after login), only ADM ticked
     erp.set_date(FORM, "fr_dt", "year_ago")
     erp.set_date(FORM, "to_dt", "today")
     open_documents()
